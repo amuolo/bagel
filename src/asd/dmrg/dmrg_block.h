@@ -1,26 +1,25 @@
 //
-// BAGEL - Parallel electron correlation program.
+// BAGEL - Brilliantly Advanced General Electronic Structure Library
 // Filename: dmrg_block.h
 // Copyright (C) 2014 Toru Shiozaki
 //
 // Author: Toru Shiozaki <shiozaki@northwestern.edu>
-// Maintainer: NU theory
+// Maintainer: Shiozaki Group
 //
 // This file is part of the BAGEL package.
 //
-// The BAGEL package is free software; you can redistribute it and/or modify
-// it under the terms of the GNU Library General Public License as published by
-// the Free Software Foundation; either version 3, or (at your option)
-// any later version.
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
 //
-// The BAGEL package is distributed in the hope that it will be useful,
+// This program is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-// GNU Library General Public License for more details.
+// GNU General Public License for more details.
 //
-// You should have received a copy of the GNU Library General Public License
-// along with the BAGEL package; see COPYING.  If not, write to
-// the Free Software Foundation, 675 Mass Ave, Cambridge, MA 02139, USA.
+// You should have received a copy of the GNU General Public License
+// along with this program.  If not, see <http://www.gnu.org/licenses/>.
 //
 
 #ifndef BAGEL_ASD_DMRG_DMRG_BLOCK_H
@@ -32,7 +31,6 @@
 #include <src/asd/dmrg/gamma_forest_prod_asd.h>
 #include <src/asd/dmrg/block_operators.h>
 #include <src/asd/dmrg/kronecker.h>
-#include <src/ci/ras/civector.h>
 
 namespace bagel {
 
@@ -94,10 +92,43 @@ class DMRG_Block1 : public std::enable_shared_from_this<DMRG_Block1>, public DMR
     DMRG_Block1() { }
 
     /// constructor that takes an Rvalue reference to a GammaForestASD
-    DMRG_Block1(GammaForestASD<RASDvec>&& forest, const std::map<BlockKey, std::shared_ptr<const Matrix>> h2e, const std::map<BlockKey,
-               std::shared_ptr<const Matrix>> spin, std::shared_ptr<const Matrix> coeff);
-    DMRG_Block1(GammaForestProdASD&& forest, const std::map<BlockKey, std::shared_ptr<const Matrix>> h2e, const std::map<BlockKey,
-               std::shared_ptr<const Matrix>> spin, std::shared_ptr<const Matrix> coeff);
+    template <typename GammaForestType>
+    DMRG_Block1(GammaForestType&& forest, const std::map<BlockKey, std::shared_ptr<const Matrix>> h2e,
+                const std::map<BlockKey, std::shared_ptr<const Matrix>> spin, std::shared_ptr<const Matrix> coeff)
+     : DMRG_Block(coeff), H2e_(h2e), spin_(spin) {
+      Timer dmrgtime(2);
+      // Build set of blocks
+      for (auto& i : h2e) {
+        assert(i.second->ndim() == i.second->mdim());
+        blocks_.emplace(i.first.nelea, i.first.neleb, i.second->ndim());
+      }
+      dmrgtime.tick_print("prepare blocks");
+
+      // initialize operator space
+      for (auto o : forest.sparselist()) {
+        std::list<GammaSQ> gammalist = std::get<0>(o);
+
+        BlockInfo brakey = std::get<1>(o);
+        BlockInfo ketkey = std::get<2>(o);
+        assert(blocks_.count(brakey) && blocks_.count(ketkey) && forest.exist(brakey, ketkey, gammalist));
+
+        std::shared_ptr<const Matrix> mat = forest.get(brakey, ketkey, gammalist);
+        btas::CRange<3> range(brakey.nstates, ketkey.nstates, lrint(pow(norb(), gammalist.size())));
+        // checking dimensions
+        assert(mat->ndim() == range.extent(0)*range.extent(1));
+        assert(mat->mdim() == range.extent(2));
+        assert(mat->storage().size() == range.area());
+        // convert this matrix to 3-tensor
+        auto tensor = std::make_shared<btas::Tensor3<double>>(range, std::move(mat->storage()));
+#ifdef HAVE_MPI_H
+        mpi__->broadcast(tensor->data(), tensor->size(), 0);
+        dmrgtime.tick_print("broadcast");
+#endif
+        // add matrix
+        CouplingBlock cb(brakey, ketkey, tensor);
+        sparse_[gammalist].emplace(cb.key(), cb);
+      }
+    }
 
     std::string block_info_to_string(const BlockKey k, const int state) const override;
 

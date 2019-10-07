@@ -1,5 +1,5 @@
 //
-// BAGEL - Parallel electron correlation program.
+// BAGEL - Brilliantly Advanced General Electronic Structure Library
 // Filename: coulombbatch_base.h
 // Copyright (C) 2012 Toru Shiozaki
 //
@@ -8,19 +8,18 @@
 //
 // This file is part of the BAGEL package.
 //
-// The BAGEL package is free software; you can redistribute it and/or modify
-// it under the terms of the GNU Library General Public License as published by
-// the Free Software Foundation; either version 3, or (at your option)
-// any later version.
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
 //
-// The BAGEL package is distributed in the hope that it will be useful,
+// This program is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-// GNU Library General Public License for more details.
+// GNU General Public License for more details.
 //
-// You should have received a copy of the GNU Library General Public License
-// along with the BAGEL package; see COPYING.  If not, write to
-// the Free Software Foundation, 675 Mass Ave, Cambridge, MA 02139, USA.
+// You should have received a copy of the GNU General Public License
+// along with this program.  If not, see <http://www.gnu.org/licenses/>.
 //
 
 
@@ -40,23 +39,22 @@ template <typename DataType, Int_t IntType = Int_t::Standard>
 class CoulombBatch_Base : public RysIntegral<DataType, IntType> {
 
   protected:
+    static constexpr double T_thresh__ = 1.0e-8;
 
     std::shared_ptr<const Molecule> mol_;
     int natom_;
 
-    /// for periodic calculations (UNCHECKED!!)
-    const int L_;
-    const double A_;
-
     void compute_ssss(const double) override;
     void allocate_data(const int asize_final, const int csize_final, const int asize_final_sph, const int csize_final_sph) override;
+
+    virtual void root_weight(const int ps) = 0;
     virtual DataType get_PQ(const double coord1, const double coord2, const double exp1, const double exp2, const double one12, const int center1, const int dim, const bool swap) {
       return (coord1*exp1 + coord2*exp2) * one12;
     }
 
   public:
-    CoulombBatch_Base(const std::array<std::shared_ptr<const Shell>,2>& _info, const std::shared_ptr<const Molecule> mol, const int deriv,
-                  std::shared_ptr<StackMem> stack = nullptr, const int L = 0, const double A = 0.0);
+    CoulombBatch_Base(const std::array<std::shared_ptr<const Shell>,2>& _info, std::shared_ptr<const Molecule> mol, const int deriv, const int breit,
+                  std::shared_ptr<StackMem> stack = nullptr);
     ~CoulombBatch_Base() {}
 
     std::shared_ptr<const Molecule> mol() const { return mol_; }
@@ -98,11 +96,7 @@ using CoulombBatch_base = CoulombBatch_Base<double>;
 
 }
 
-#define COULOMBBATCH_BASE_HEADERS
-#include <src/integral/rys/coulombbatch_base_impl.hpp>
-#undef COULOMBBATCH_BASE_HEADERS
-
 extern template class bagel::CoulombBatch_Base<double>;
-//extern template class bagel::CoulombBatch_Base<std::complex<double>>;
+extern template class bagel::CoulombBatch_Base<std::complex<double>,bagel::Int_t::London>;
 
 #endif

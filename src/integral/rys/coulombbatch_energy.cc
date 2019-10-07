@@ -1,5 +1,5 @@
 //
-// BAGEL - Parallel electron correlation program.
+// BAGEL - Brilliantly Advanced General Electronic Structure Library
 // Filename: coulombbatch_energy.cc
 // Copyright (C) 2009 Toru Shiozaki
 //
@@ -8,19 +8,18 @@
 //
 // This file is part of the BAGEL package.
 //
-// The BAGEL package is free software; you can redistribute it and/or modify
-// it under the terms of the GNU Library General Public License as published by
-// the Free Software Foundation; either version 3, or (at your option)
-// any later version.
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
 //
-// The BAGEL package is distributed in the hope that it will be useful,
+// This program is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-// GNU Library General Public License for more details.
+// GNU General Public License for more details.
 //
-// You should have received a copy of the GNU Library General Public License
-// along with the BAGEL package; see COPYING.  If not, write to
-// the Free Software Foundation, 675 Mass Ave, Cambridge, MA 02139, USA.
+// You should have received a copy of the GNU General Public License
+// along with this program.  If not, see <http://www.gnu.org/licenses/>.
 //
 
 #include <src/integral/sortlist.h>
@@ -35,9 +34,8 @@ const static HRRList hrr;
 const static CarSphList carsphlist;
 
 void CoulombBatch_energy::compute() {
-  const double zero = 0.0;
 
-  double* const stack_save = stack_->template get<double>(size_alloc_);
+  double* const stack_save = stack_->template get<double>(size_block_);
   bkup_ = stack_save;
 
   const int worksize = rank_ * amax1_;
@@ -55,26 +53,18 @@ void CoulombBatch_energy::compute() {
   double r1z[20];
   double r2[20];
 
-  const int alc = size_alloc_;
-  fill_n(data_, alc, zero);
+  fill_n(data_, size_block_, 0.0);
 
   const SortList sort(spherical1_);
 
   // perform VRR
-  const int natom_unit = natom_ / (2 * L_ + 1);
-  assert(natom_ % (2 * L_ + 1) == 0);
   for (int xj = 0; xj != screening_size_; ++xj) {
     const int i = screening_[xj];
     const int ecp = (indexecp_.empty()) ? 1 : max_rterms_;
     const int iprim = i / (natom_ * ecp);
-    const int resid = (i / ecp) % natom_;
-    const int cell  = resid / natom_unit - L_;
-    const int iatom = resid % natom_unit;
-    double disp[3];
-    disp[0] = disp[1] = 0.0;
-    disp[2] = A_ * cell;
+    const int iatom = (i / ecp) % natom_;
     const int offset_iprim = iprim * asize_;
-    double* current_data = &data_[offset_iprim];
+    double* current_data = data_ + offset_iprim;
 
     const double* croots = roots_ + i * rank_;
     const double* cweights = weights_ + i * rank_;
@@ -84,9 +74,9 @@ void CoulombBatch_energy::compute() {
         zeta = mol_->atoms(iatom)->ecp_parameters()->shell_maxl_ecp()->ecp_exponents(indexecp_[xj]);
       const double sroot = scale_root(croots[r], xp_[i], zeta);
       const double sweight = scale_weight(cweights[r]);
-      r1x[r] = P_[i * 3    ] - Ax - (P_[i * 3    ] - mol_->atoms(iatom)->position(0) - disp[0]) * sroot;
-      r1y[r] = P_[i * 3 + 1] - Ay - (P_[i * 3 + 1] - mol_->atoms(iatom)->position(1) - disp[1]) * sroot;
-      r1z[r] = P_[i * 3 + 2] - Az - (P_[i * 3 + 2] - mol_->atoms(iatom)->position(2) - disp[2]) * sroot;
+      r1x[r] = P_[i * 3    ] - Ax - (P_[i * 3    ] - mol_->atoms(iatom)->position(0)) * sroot;
+      r1y[r] = P_[i * 3 + 1] - Ay - (P_[i * 3 + 1] - mol_->atoms(iatom)->position(1)) * sroot;
+      r1z[r] = P_[i * 3 + 2] - Az - (P_[i * 3 + 2] - mol_->atoms(iatom)->position(2)) * sroot;
       r2[r] = (1.0 - sroot) * 0.5 / xp_[i];
 
       workx[r] = sweight * coeff_[i];
@@ -137,7 +127,7 @@ void CoulombBatch_energy::compute() {
       const int hrr_index = basisinfo_[0]->angular_number() * ANG_HRR_END + basisinfo_[1]->angular_number();
       hrr.hrrfunc_call(hrr_index, contsize_, bkup_, AB_, data_);
     } else {
-      copy(bkup_, bkup_+size_alloc_, data_);
+      copy_n(bkup_, size_block_, data_);
     }
   }
 
@@ -157,13 +147,13 @@ void CoulombBatch_energy::compute() {
   } else {
     const unsigned int index = basisinfo_[1]->angular_number() * ANG_HRR_END + basisinfo_[0]->angular_number();
     sort.sortfunc_call(index, bkup_, data_, cont1size_, cont0size_, 1, swap01_);
-    copy(bkup_, bkup_+size_final_, data_);
+    copy_n(bkup_, size_final_, data_);
   }
 
   stack_->release(worksize, workz);
   stack_->release(worksize, worky);
   stack_->release(worksize, workx);
-  stack_->release(size_alloc_, stack_save);
+  stack_->release(size_block_, stack_save);
 }
 
 void CoulombBatch_energy::root_weight(const int ps) {

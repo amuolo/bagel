@@ -1,5 +1,5 @@
 //
-// BAGEL - Parallel electron correlation program.
+// BAGEL - Brilliantly Advanced General Electronic Structure Library
 // Filename: atomicdensities.cc
 // Copyright (C) 2013 Toru Shiozaki
 //
@@ -8,19 +8,18 @@
 //
 // This file is part of the BAGEL package.
 //
-// The BAGEL package is free software; you can redistribute it and/or modify
-// it under the terms of the GNU Library General Public License as published by
-// the Free Software Foundation; either version 3, or (at your option)
-// any later version.
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
 //
-// The BAGEL package is distributed in the hope that it will be useful,
+// This program is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-// GNU Library General Public License for more details.
+// GNU General Public License for more details.
 //
-// You should have received a copy of the GNU Library General Public License
-// along with the BAGEL package; see COPYING.  If not, write to
-// the Free Software Foundation, 675 Mass Ave, Cambridge, MA 02139, USA.
+// You should have received a copy of the GNU General Public License
+// along with this program.  If not, see <http://www.gnu.org/licenses/>.
 //
 
 #include <src/scf/atomicdensities.h>
@@ -32,9 +31,9 @@
 using namespace std;
 using namespace bagel;
 
-const static AtomMap atommap_;
+const static AtomMap atommap;
 
-AtomicDensities::AtomicDensities(std::shared_ptr<const Geometry> g) : Matrix(g->nbasis(), g->nbasis()), geom_(g) {
+AtomicDensities::AtomicDensities(shared_ptr<const Geometry> g) : Matrix(g->nbasis(), g->nbasis()), geom_(g) {
   // first make a list of unique atoms
   const string defbasis = geom_->basisfile();
   map<pair<string,string>, shared_ptr<const Matrix>> atoms;
@@ -44,7 +43,16 @@ AtomicDensities::AtomicDensities(std::shared_ptr<const Geometry> g) : Matrix(g->
   // read basis file
   shared_ptr<const PTree> bdata = PTree::read_basis(defbasis);
 
-  auto ai = geom_->aux_atoms().begin();
+  vector<shared_ptr<const Atom>> aux_atoms;
+  if (geom_->auxfile().empty()) {
+     for (auto& a : geom_->atoms()) {
+       auto aux_atom = make_shared<const Atom>(*a, a->spherical(), geom_->basisfile(), make_pair(geom_->basisfile(), bdata), nullptr);
+       aux_atoms.push_back(aux_atom);
+     }
+  } else {
+    aux_atoms = geom_->aux_atoms();
+  }
+  auto ai = aux_atoms.begin();
   for (auto& i : geom_->atoms()) {
     if (i->dummy()) { ++ai; continue; }
     if (atoms.find({i->name(),i->basis()}) == atoms.end()) {
@@ -106,8 +114,8 @@ shared_ptr<const Matrix> AtomicDensities::compute_atomic(shared_ptr<const Geomet
     coeff = make_shared<const Matrix>(*tildex * ints);
   }
 
-  tuple<int,int,int,int> nclosed = atommap_.num_closed(ga->atoms().front()->name());
-  tuple<int,int,int,int> nopen   = atommap_.num_open(ga->atoms().front()->name());
+  tuple<int,int,int,int> nclosed = atommap.num_closed(ga->atoms().front()->name());
+  tuple<int,int,int,int> nopen   = atommap.num_open(ga->atoms().front()->name());
   const array<int,4> nclo {{get<0>(nclosed)/2, get<1>(nclosed)/2, get<2>(nclosed)/2, get<3>(nclosed)/2}};
   const array<int,4> nope {{get<0>(nopen),     get<1>(nopen),     get<2>(nopen),     get<3>(nopen)}};
   const int sclosed = (!ga->atoms().front()->use_ecp_basis()) ? get<0>(nclosed)+get<1>(nclosed)+get<2>(nclosed)+get<3>(nclosed)

@@ -1,5 +1,5 @@
 //
-// BAGEL - Parallel electron correlation program.
+// BAGEL - Brilliantly Advanced General Electronic Structure Library
 // Filename: zharrison_denom.cc
 // Copyright (C) 2013 Toru Shiozaki
 //
@@ -8,31 +8,25 @@
 //
 // This file is part of the BAGEL package.
 //
-// The BAGEL package is free software; you can redistribute it and/or modify
-// it under the terms of the GNU Library General Public License as published by
-// the Free Software Foundation; either version 3, or (at your option)
-// any later version.
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
 //
-// The BAGEL package is distributed in the hope that it will be useful,
+// This program is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-// GNU Library General Public License for more details.
+// GNU General Public License for more details.
 //
-// You should have received a copy of the GNU Library General Public License
-// along with the BAGEL package; see COPYING.  If not, write to
-// the Free Software Foundation, 675 Mass Ave, Cambridge, MA 02139, USA.
+// You should have received a copy of the GNU General Public License
+// along with this program.  If not, see <http://www.gnu.org/licenses/>.
 //
 
-#include <iomanip>
-#include <stdexcept>
 #include <src/ci/zfci/zharrison.h>
 #include <src/ci/fci/hzdenomtask.h>
-#include <src/util/combination.hpp>
-#include <src/util/constants.h>
 
 using namespace std;
 using namespace bagel;
-
 
 void ZHarrison::const_denom() {
   Timer denom_t;
@@ -42,18 +36,13 @@ void ZHarrison::const_denom() {
 
   for (int i = 0; i != norb_; ++i) {
     for (int j = 0; j != norb_; ++j) {
-      jop->element(j, i) = 0.5*jop_->mo2e("0000", j, i, j, i).real();
-      kop->element(j, i) = 0.5*jop_->mo2e("1111", j, i, i, j).real();
-      // assert for Kramers and symmetry
-      // TODO why do none of these three fail with magnetic field?
-      assert(fabs(jop_->mo2e("0000", j, i, j, i).imag()) < 1.0e-8);
-      assert(fabs(jop_->mo2e("1111", j, i, i, j).imag()) < 1.0e-8);
-      assert(fabs(jop_->mo2e("0101", j, i, j, i).imag()) < 1.0e-8);
+      jop->element(j, i) = 0.25*jop_->mo2e("0000", j, i, j, i).real()
+                         + 0.25*jop_->mo2e("1111", j, i, j, i).real();
+      kop->element(j, i) = 0.25*jop_->mo2e("0000", j, i, i, j).real()
+                         + 0.25*jop_->mo2e("1111", j, i, i, j).real();
     }
-    (*h)(i) = jop_->mo1e("00", i,i).real();
-    // assert for Kramers and symmetry
-    assert((abs(jop_->mo1e("00", i,i) - jop_->mo1e("11", i,i)) < 1.0e-8) || !tsymm_);
-    assert(abs(jop_->mo1e("00", i,i).imag()) < 1.0e-8);
+    (*h)(i) = 0.5*jop_->mo1e("00", i,i).real()
+            + 0.5*jop_->mo1e("11", i,i).real();
   }
   denom_t.tick_print("jop, kop");
 

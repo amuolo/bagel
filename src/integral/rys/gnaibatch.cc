@@ -1,5 +1,5 @@
 //
-// BAGEL - Parallel electron correlation program.
+// BAGEL - Brilliantly Advanced General Electronic Structure Library
 // Filename: gnaibatch.cc
 // Copyright (C) 2012 Toru Shiozaki
 //
@@ -8,19 +8,18 @@
 //
 // This file is part of the BAGEL package.
 //
-// The BAGEL package is free software; you can redistribute it and/or modify
-// it under the terms of the GNU Library General Public License as published by
-// the Free Software Foundation; either version 3, or (at your option)
-// any later version.
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
 //
-// The BAGEL package is distributed in the hope that it will be useful,
+// This program is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-// GNU Library General Public License for more details.
+// GNU General Public License for more details.
 //
-// You should have received a copy of the GNU Library General Public License
-// along with the BAGEL package; see COPYING.  If not, write to
-// the Free Software Foundation, 675 Mass Ave, Cambridge, MA 02139, USA.
+// You should have received a copy of the GNU General Public License
+// along with this program.  If not, see <http://www.gnu.org/licenses/>.
 //
 
 
@@ -31,7 +30,7 @@ using namespace bagel;
 
 
 GNAIBatch::GNAIBatch(const array<shared_ptr<const Shell>,2>& _info, const shared_ptr<const Molecule> mol, const tuple<int,int> i, shared_ptr<StackMem> stack)
-  :  CoulombBatch_base(_info, mol, 1, stack), iatom_(i) {
+  :  CoulombBatch_base(_info, mol, 1, 0, stack), iatom_(i) {
   if (swap01_) {
     swap(get<0>(iatom_), get<1>(iatom_));
   }
@@ -73,9 +72,9 @@ void GNAIBatch::root_weight(const int ps) {
       if (std::abs(T_[i]) < T_thresh__) {
         weights_[i] = 1.0;
       } else {
-        const double sqrtt = std::sqrt(T_[i]);
+        const double sqrtt = sqrt(T_[i]);
         const double erfsqt = inline_erf(sqrtt);
-        weights_[i] = erfsqt * std::sqrt(pi__) * 0.5 / sqrtt;
+        weights_[i] = erfsqt * sqrt(pi__) * 0.5 / sqrtt;
       }
     }
   } else {

@@ -12,6 +12,7 @@
 #include <btas/array_adaptor.h>
 #include <btas/index_traits.h>
 #include <btas/varray/varray.h>
+#include <boost/assert.hpp>
 
 namespace btas {
 
@@ -106,6 +107,9 @@ namespace btas {
       bool contiguous() const {
         return contiguous_;
       }
+
+      BoxOrdinal& operator=(const BoxOrdinal&) = default;
+      BoxOrdinal& operator=(BoxOrdinal&&) = default;
 
       template <typename Index>
       typename std::enable_if<btas::is_index<Index>::value, value_type>::type

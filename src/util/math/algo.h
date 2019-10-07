@@ -1,5 +1,5 @@
 //
-// BAGEL - Parallel electron correlation program.
+// BAGEL - Brilliantly Advanced General Electronic Structure Library
 // Filename: algo.h
 // Copyright (C) 2013 Toru Shiozaki
 //
@@ -8,19 +8,18 @@
 //
 // This file is part of the BAGEL package.
 //
-// The BAGEL package is free software; you can redistribute it and/or modify
-// it under the terms of the GNU Library General Public License as published by
-// the Free Software Foundation; either version 3, or (at your option)
-// any later version.
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
 //
-// The BAGEL package is distributed in the hope that it will be useful,
+// This program is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-// GNU Library General Public License for more details.
+// GNU General Public License for more details.
 //
-// You should have received a copy of the GNU Library General Public License
-// along with the BAGEL package; see COPYING.  If not, write to
-// the Free Software Foundation, 675 Mass Ave, Cambridge, MA 02139, USA.
+// You should have received a copy of the GNU General Public License
+// along with this program.  If not, see <http://www.gnu.org/licenses/>.
 //
 
 #ifndef __SRC_MATH_ALGO_H
@@ -31,15 +30,22 @@
 #include <type_traits>
 #include <stdexcept>
 #include <algorithm>
+#include <numeric>
 #include <cassert>
 #include <src/util/f77.h>
+#include <src/util/math/zquatev/zquatev.h>
 
 namespace bagel {
 
 extern void dcsrmm_(const char *transa, const int m, const int n, const int k, const double alpha, const double* adata,
                     const int* acols, const int* arind, const double* b, const int ldb, const double beta,
                     double* c, const int ldc);
-extern void zquatev_(const int n, std::complex<double>* mat, double* eig);
+extern void vdmul_(const int n, const double*, const double*, double*);
+
+template <typename... Args>
+auto zquatev(Args&&... args) -> decltype(ts::zquatev(std::forward<Args>(args)...)) {
+  return ts::zquatev(std::forward<Args>(args)...);
+}
 
 namespace detail {
 namespace {
@@ -85,28 +91,38 @@ namespace {
 namespace blas {
 
 // Transpose
-template<typename T,
-         class = typename std::enable_if< std::is_same<double,T>::value || std::is_same<std::complex<double>,T>::value >::type
+template<typename T, typename U = T,
+         class = typename std::enable_if< (std::is_same<double,T>::value || std::is_same<std::complex<double>,T>::value)
+                                          and  std::is_convertible<U, T>::value >::type
         >
-void transpose(const T* a, const int b, const int c, T* d, const T fac = 1.0) { assert(false); }
+void transpose(const T* a, const int b, const int c, T* d, const U fac = static_cast<U>(1.0));
 template<>
 void transpose(const double* a, const int b, const int c, double* d, const double fac);
 template<>
 void transpose(const std::complex<double>* a, const int b, const int c, std::complex<double>* d, const std::complex<double> fac);
+template<>
+void transpose(const std::complex<double>* a, const int b, const int c, std::complex<double>* d, const double fac);
 
-template<typename T,
-         class = typename std::enable_if< std::is_same<double,T>::value >::type
+template<typename T, typename U = T,
+         class = typename std::enable_if< (std::is_same<double,T>::value || std::is_same<std::complex<double>,T>::value)
+                                          and  std::is_convertible<U, T>::value >::type
         >
-void transpose_add(const T* a, const int b, const int c, T* d, const T fac = 1.0) { assert(false); }
+void transpose_add(const T* a, const int b, const int c, T* d, const U fac = static_cast<U>(1.0));
 template<>
 void transpose_add(const double* a, const int b, const int c, double* d, const double fac);
+template<>
+void transpose_add(const std::complex<double>* a, const int b, const int c, std::complex<double>* d, const std::complex<double> fac);
+template<>
+void transpose_add(const std::complex<double>* a, const int b, const int c, std::complex<double>* d, const double fac);
 
-template<typename T,
-         class = typename std::enable_if< std::is_same<std::complex<double>,T>::value >::type
+template<typename T, typename U = T,
+         class = typename std::enable_if< std::is_same<std::complex<double>,T>::value and std::is_convertible<U, T>::value >::type
         >
-void transpose_conjg(const T* a, const int b, const int c, T* d, const T fac = 1.0) { assert(false); }
+void transpose_conjg(const T* a, const int b, const int c, T* d, const U fac = static_cast<U>(1.0));
 template<>
 void transpose_conjg(const std::complex<double>* a, const int b, const int c, std::complex<double>* d, const std::complex<double> fac);
+template<>
+void transpose_conjg(const std::complex<double>* a, const int b, const int c, std::complex<double>* d, const double fac);
 
 
 namespace {
@@ -185,6 +201,18 @@ namespace {
   template<class T>
   auto average(const T& container) -> decltype(std::accumulate(container.begin(), container.end(), 0.0)/container.size()) {
     return std::accumulate(container.begin(), container.end(), 0.0) / container.size();
+  }
+
+  // conjugate an array
+  template<class T,
+           class = typename std::enable_if<std::is_pointer<T>::value>::type >
+  void conj_n(T p, const size_t n) { throw std::logic_error("illegal call: blas::conj_n"); }
+  template<>
+  void conj_n(double* p, const size_t n) { /*do nothing*/ }
+  template<>
+  void conj_n(std::complex<double>* p, const size_t n) {
+    double* dp = reinterpret_cast<double*>(p) + 1;
+    for (double* i = dp; i <= dp + 2*n-2; i += 2) *i = -*i;
   }
 
 }}

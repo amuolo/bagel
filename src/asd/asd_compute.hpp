@@ -1,5 +1,5 @@
 //
-// BAGEL - Parallel electron correlation program.
+// BAGEL - Brilliantly Advanced General Electronic Structure Library
 // Filename: asd_compute.hpp
 // Copyright (C) 2013 Toru Shiozaki
 //
@@ -8,19 +8,18 @@
 //
 // This file is part of the BAGEL package.
 //
-// The BAGEL package is free software; you can redistribute it and/or modify
-// it under the terms of the GNU Library General Public License as published by
-// the Free Software Foundation; either version 3, or (at your option)
-// any later version.
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
 //
-// The BAGEL package is distributed in the hope that it will be useful,
+// This program is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-// GNU Library General Public License for more details.
+// GNU General Public License for more details.
 //
-// You should have received a copy of the GNU Library General Public License
-// along with the BAGEL package; see COPYING.  If not, write to
-// the Free Software Foundation, 675 Mass Ave, Cambridge, MA 02139, USA.
+// You should have received a copy of the GNU General Public License
+// along with this program.  If not, see <http://www.gnu.org/licenses/>.
 //
 
 #ifdef ASD_HEADERS
@@ -37,28 +36,32 @@ void ASD<VecType>::compute() {
   std::cout << "     -  charge: " << charge_ << std::endl;
   std::cout << "     -  dimer states: " << dimerstates_ << std::endl << std::endl;
 
-  auto gammaforest = std::make_shared<GammaForest<VecType, 2>>();
-  {
-    auto spinmap = std::make_shared<ASDSpinMap<VecType>>();
-    for (auto iAB = subspaces_.begin(); iAB != subspaces_.end(); ++iAB) {
-      for (auto jAB = subspaces_.begin(); jAB != iAB; ++jAB) {
-        gammaforest->couple_blocks(*jAB, *iAB);
-        spinmap->couple_blocks(*jAB, *iAB);
+  if (!fix_ci_) {
+    auto gammaforest = std::make_shared<GammaForest<VecType, 2>>();
+    {
+      auto spinmap = std::make_shared<ASDSpinMap<VecType>>();
+      for (auto iAB = subspaces_.begin(); iAB != subspaces_.end(); ++iAB) {
+        for (auto jAB = subspaces_.begin(); jAB != iAB; ++jAB) {
+          gammaforest->couple_blocks(*jAB, *iAB);
+          spinmap->couple_blocks(*jAB, *iAB);
+        }
+        gammaforest->couple_blocks(*iAB, *iAB);
+        spinmap->diagonal_block(*iAB);
       }
-      gammaforest->couple_blocks(*iAB, *iAB);
-      spinmap->diagonal_block(*iAB);
+      spin_ = std::make_shared<ASDSpin>(dimerstates_, *spinmap, max_spin_);
     }
-    spin_ = std::make_shared<ASDSpin>(dimerstates_, *spinmap, max_spin_);
+
+    std::cout << "  o Preparing Gamma trees and building spin operator - " << std::setw(9) << std::fixed << std::setprecision(2) << asdtime.tick() << std::endl;
+    std::cout << "    - spin elements: " << spin_->size() << std::endl;
+
+    gammaforest->compute();
+    gammatensor_ = { std::make_shared<GammaTensor>(asd::Wrap<GammaForest<VecType,2>,0>(gammaforest), subspaces_),
+                     std::make_shared<GammaTensor>(asd::Wrap<GammaForest<VecType,2>,1>(gammaforest), subspaces_) };
+
+    std::cout << "  o Computing Gamma trees - " << std::setw(9) << std::fixed << std::setprecision(2) << asdtime.tick() << std::endl;
+  } else {
+    std::cout << "  o Monomer CI coefficients are fixed. Gamma trees from previous calculation will be used." << std::endl;
   }
-
-  std::cout << "  o Preparing Gamma trees and building spin operator - " << std::setw(9) << std::fixed << std::setprecision(2) << asdtime.tick() << std::endl;
-  std::cout << "    - spin elements: " << spin_->size() << std::endl;
-
-  gammaforest->compute();
-  gammatensor_ = { std::make_shared<GammaTensor>(asd::Wrap<GammaForest<VecType,2>,0>(gammaforest), subspaces_),
-                   std::make_shared<GammaTensor>(asd::Wrap<GammaForest<VecType,2>,1>(gammaforest), subspaces_) };
-
-  std::cout << "  o Computing Gamma trees - " << std::setw(9) << std::fixed << std::setprecision(2) << asdtime.tick() << std::endl;
 
   if (store_matrix_) hamiltonian_ = std::make_shared<Matrix>(dimerstates_, dimerstates_);
 
@@ -66,11 +69,11 @@ void ASD<VecType>::compute() {
 
   for (auto& subspace : subspaces_) {
     compute_pure_terms(subspace, jop_);
-    std::shared_ptr<Matrix> block = compute_diagonal_block<true>(subspace);
+    std::shared_ptr<Matrix> block = compute_diagonal_block(subspace);
     if (store_matrix_)
       hamiltonian_->add_block(1.0, subspace.offset(), subspace.offset(), block->ndim(), block->mdim(), block);
     const int n = block->ndim();
-    for ( int i = 0; i < n; ++i ) denom_[subspace.offset() + i] = block->element(i,i);
+    for (int i = 0; i < n; ++i) denom_[subspace.offset() + i] = block->element(i,i);
   }
   std::cout << "  o Computing diagonal blocks and building denominator - time " << std::setw(9) << std::fixed << std::setprecision(2) << asdtime.tick() << std::endl;
 
@@ -81,7 +84,7 @@ void ASD<VecType>::compute() {
         const int joff = jAB->offset();
 
 // TODO remove this comment once the gammaforst issue has been fixed (bra and ket have been exchanged)
-        std::shared_ptr<Matrix> block = couple_blocks<true>(*jAB, *iAB);
+        std::shared_ptr<Matrix> block = couple_blocks(*jAB, *iAB);
 
         if (block) {
           hamiltonian_->add_block(1.0, joff, ioff, block->ndim(), block->mdim(), block);
@@ -92,7 +95,7 @@ void ASD<VecType>::compute() {
     std::cout << "  o Computing off-diagonal blocks - time " << std::setw(9) << std::fixed << std::setprecision(2) << asdtime.tick() << std::endl;
   }
 
-  std::cout << "  o Diagonalizing ME Hamiltonian with a Davidson procedure" << std::endl;
+  std::cout << "  o Diagonalizing ASD Hamiltonian with a Davidson procedure" << std::endl;
   auto cc = std::make_shared<Matrix>(dimerstates_, nstates_);
   generate_initial_guess(cc, subspaces_base(), nstates_);
   std::cout << "    - initial guess time " << std::setw(9) << std::fixed << std::setprecision(2) << asdtime.tick() << std::endl << std::endl;
@@ -101,7 +104,12 @@ void ASD<VecType>::compute() {
 
   adiabats_ = cc->copy();
 
+//adiabats_->print("ADIABATS", adiabats_->ndim());
+
+  if (compute_rdm_) compute_rdm12();
+
   if (dipoles_) { // TODO Redo to make better use of memory
+#if 0
     std::cout << "  o Computing properties" << std::endl;
     std::shared_ptr<const Reference> dimerref = dimer_->sref();
     DimerDipole dipole(dimerref, dimerref->nclosed(), dimerref->nclosed() + dimer_->active_refs().first->nact(), dimerref->nclosed() + dimerref->nact(), dimerref->coeff());
@@ -113,6 +121,9 @@ void ASD<VecType>::compute() {
       auto prop = std::make_shared<Matrix>( (*adiabats_) % (*tmp) * (*adiabats_) );
       properties_.emplace_back(label, prop);
     }
+#else
+    throw std::logic_error("Dipole moments should be computed from density matrices");
+#endif
   }
 
   print(print_thresh_);

@@ -1,5 +1,5 @@
 //
-// BAGEL - Parallel electron correlation program.
+// BAGEL - Brilliantly Advanced General Electronic Structure Library
 // Filename: sortlist.cc
 // Copyright (C) 2009 Toru Shiozaki
 //
@@ -8,19 +8,18 @@
 //
 // This file is part of the BAGEL package.
 //
-// The BAGEL package is free software; you can redistribute it and/or modify
-// it under the terms of the GNU Library General Public License as published by
-// the Free Software Foundation; either version 3, or (at your option)
-// any later version.
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
 //
-// The BAGEL package is distributed in the hope that it will be useful,
+// This program is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-// GNU Library General Public License for more details.
+// GNU General Public License for more details.
 //
-// You should have received a copy of the GNU Library General Public License
-// along with the BAGEL package; see COPYING.  If not, write to
-// the Free Software Foundation, 675 Mass Ave, Cambridge, MA 02139, USA.
+// You should have received a copy of the GNU General Public License
+// along with this program.  If not, see <http://www.gnu.org/licenses/>.
 //
 
 
@@ -58,6 +57,16 @@ SortList::SortList(const bool spherical) {
     sortfunc[ANG_HRR_END * 5 + 5] = &sort_indices_55_sph;
     sortfunc[ANG_HRR_END * 5 + 6] = &sort_indices_56_sph;
     sortfunc[ANG_HRR_END * 6 + 6] = &sort_indices_66_sph;
+#ifdef COMPILE_J_ORB
+    sortfunc[ANG_HRR_END * 0 + 7] = &sort_indices_07_sph;
+    sortfunc[ANG_HRR_END * 1 + 7] = &sort_indices_17_sph;
+    sortfunc[ANG_HRR_END * 2 + 7] = &sort_indices_27_sph;
+    sortfunc[ANG_HRR_END * 3 + 7] = &sort_indices_37_sph;
+    sortfunc[ANG_HRR_END * 4 + 7] = &sort_indices_47_sph;
+    sortfunc[ANG_HRR_END * 5 + 7] = &sort_indices_57_sph;
+    sortfunc[ANG_HRR_END * 6 + 7] = &sort_indices_67_sph;
+    sortfunc[ANG_HRR_END * 7 + 7] = &sort_indices_77_sph;
+#endif
   } else {
     sortfunc[ANG_HRR_END * 0 + 0] = &sort_indices_00;
     sortfunc[ANG_HRR_END * 0 + 1] = &sort_indices_01;
@@ -87,6 +96,16 @@ SortList::SortList(const bool spherical) {
     sortfunc[ANG_HRR_END * 5 + 5] = &sort_indices_55;
     sortfunc[ANG_HRR_END * 5 + 6] = &sort_indices_56;
     sortfunc[ANG_HRR_END * 6 + 6] = &sort_indices_66;
+#ifdef COMPILE_J_ORB
+    sortfunc[ANG_HRR_END * 0 + 7] = &sort_indices_07;
+    sortfunc[ANG_HRR_END * 1 + 7] = &sort_indices_17;
+    sortfunc[ANG_HRR_END * 2 + 7] = &sort_indices_27;
+    sortfunc[ANG_HRR_END * 3 + 7] = &sort_indices_37;
+    sortfunc[ANG_HRR_END * 4 + 7] = &sort_indices_47;
+    sortfunc[ANG_HRR_END * 5 + 7] = &sort_indices_57;
+    sortfunc[ANG_HRR_END * 6 + 7] = &sort_indices_67;
+    sortfunc[ANG_HRR_END * 7 + 7] = &sort_indices_77;
+#endif
   }
 }
 
@@ -121,6 +140,16 @@ CSortList::CSortList(const bool spherical) {
     sortfunc[ANG_HRR_END * 5 + 5] = &sort_indices_55_sph;
     sortfunc[ANG_HRR_END * 5 + 6] = &sort_indices_56_sph;
     sortfunc[ANG_HRR_END * 6 + 6] = &sort_indices_66_sph;
+#ifdef COMPILE_J_ORB
+    sortfunc[ANG_HRR_END * 0 + 7] = &sort_indices_07_sph;
+    sortfunc[ANG_HRR_END * 1 + 7] = &sort_indices_17_sph;
+    sortfunc[ANG_HRR_END * 2 + 7] = &sort_indices_27_sph;
+    sortfunc[ANG_HRR_END * 3 + 7] = &sort_indices_37_sph;
+    sortfunc[ANG_HRR_END * 4 + 7] = &sort_indices_47_sph;
+    sortfunc[ANG_HRR_END * 5 + 7] = &sort_indices_57_sph;
+    sortfunc[ANG_HRR_END * 6 + 7] = &sort_indices_67_sph;
+    sortfunc[ANG_HRR_END * 7 + 7] = &sort_indices_77_sph;
+#endif
   } else {
     sortfunc[ANG_HRR_END * 0 + 0] = &sort_indices_00;
     sortfunc[ANG_HRR_END * 0 + 1] = &sort_indices_01;
@@ -150,5 +179,15 @@ CSortList::CSortList(const bool spherical) {
     sortfunc[ANG_HRR_END * 5 + 5] = &sort_indices_55;
     sortfunc[ANG_HRR_END * 5 + 6] = &sort_indices_56;
     sortfunc[ANG_HRR_END * 6 + 6] = &sort_indices_66;
+#ifdef COMPILE_J_ORB
+    sortfunc[ANG_HRR_END * 0 + 7] = &sort_indices_07;
+    sortfunc[ANG_HRR_END * 1 + 7] = &sort_indices_17;
+    sortfunc[ANG_HRR_END * 2 + 7] = &sort_indices_27;
+    sortfunc[ANG_HRR_END * 3 + 7] = &sort_indices_37;
+    sortfunc[ANG_HRR_END * 4 + 7] = &sort_indices_47;
+    sortfunc[ANG_HRR_END * 5 + 7] = &sort_indices_57;
+    sortfunc[ANG_HRR_END * 6 + 7] = &sort_indices_67;
+    sortfunc[ANG_HRR_END * 7 + 7] = &sort_indices_77;
+#endif
   }
 }

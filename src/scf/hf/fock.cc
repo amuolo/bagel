@@ -1,5 +1,5 @@
 //
-// BAGEL - Parallel electron correlation program.
+// BAGEL - Brilliantly Advanced General Electronic Structure Library
 // Filename: fock.cc
 // Copyright (C) 2014 Toru Shiozaki
 //
@@ -8,19 +8,18 @@
 //
 // This file is part of the BAGEL package.
 //
-// The BAGEL package is free software; you can redistribute it and/or modify
-// it under the terms of the GNU Library General Public License as published by
-// the Free Software Foundation; either version 3, or (at your option)
-// any later version.
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
 //
-// The BAGEL package is distributed in the hope that it will be useful,
+// This program is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-// GNU Library General Public License for more details.
+// GNU General Public License for more details.
 //
-// You should have received a copy of the GNU Library General Public License
-// along with the BAGEL package; see COPYING.  If not, write to
-// the Free Software Foundation, 675 Mass Ave, Cambridge, MA 02139, USA.
+// You should have received a copy of the GNU General Public License
+// along with this program.  If not, see <http://www.gnu.org/licenses/>.
 //
 
 #include <src/scf/hf/fock.h>
@@ -75,17 +74,13 @@ void Fock<0>::fock_two_electron_part(shared_ptr<const Matrix> den) {
   // starting 2-e Fock matrix evaluation!
   ////////////////////////////////////////////
   //////////////// ONLY FOR REFERENCES. //////////////////
-  shared_ptr<Petite> plist = geom_->plist();;
 
   for (int i0 = 0; i0 != size; ++i0) {
-    if (!plist->in_p1(i0)) continue;
-
     const shared_ptr<const Shell>  b0 = basis[i0];
     const int b0offset = offset[i0];
     const int b0size = b0->nbasis();
     for (int i1 = i0; i1 != size; ++i1) {
       const unsigned int i01 = i0 *size + i1;
-      if (!plist->in_p2(i01)) continue;
 
       const shared_ptr<const Shell>  b1 = basis[i1];
       const int b1offset = offset[i1];
@@ -104,8 +99,6 @@ void Fock<0>::fock_two_electron_part(shared_ptr<const Matrix> den) {
         for (int i3 = i2; i3 != size; ++i3) {
           const unsigned int i23 = i2 * size + i3;
           if (i23 < i01) continue;
-          int ijkl = plist->in_p4(i01, i23, i0, i1, i2, i3);
-          if (ijkl == 0) continue;
 
           const double density_change_23 = max_density_change[i2 * size + i3] * 4.0;
           const double density_change_03 = max_density_change[i0 * size + i2];
@@ -144,7 +137,7 @@ void Fock<0>::fock_two_electron_part(shared_ptr<const Matrix> den) {
               }
 
               const bool eqlj0j1 = (j0 == j1);
-              const double scal01 = (eqlj0j1 ? 0.5 : 1.0) * static_cast<double>(ijkl);
+              const double scal01 = (eqlj0j1 ? 0.5 : 1.0);
               const int j1n = j1 * ndim();
 
               for (int j2 = b2offset; j2 != b2offset + b2size; ++j2) {
@@ -234,7 +227,7 @@ void Fock<DF>::fock_two_electron_part(shared_ptr<const Matrix> den_ex) {
 
 
 template<int DF>
-void Fock<DF>::fock_two_electron_part_with_coeff(const MatView ocoeff, const bool rhf, const double scale_exchange) {
+void Fock<DF>::fock_two_electron_part_with_coeff(const MatView ocoeff, const bool rhf, const double scale_exchange, const double scale_coulomb) {
   if (DF == 0) throw logic_error("Fock<DF>::fock_two_electron_part_with_coeff() is only for DF cases");
 
   Timer pdebug(3);
@@ -253,16 +246,22 @@ void Fock<DF>::fock_two_electron_part_with_coeff(const MatView ocoeff, const boo
 
     if (rhf) {
       Matrix oc(ocoeff);
-      auto coeff = make_shared<const Matrix>(*oc.transpose()*2.0);
+      auto coeff = make_shared<const Matrix>(*oc.transpose()*(2.0*scale_coulomb));
       *this += *df->compute_Jop(half, coeff, true);
     } else {
-      *this += *df->compute_Jop(density_);
+      shared_ptr<Matrix> jop = df->compute_Jop(density_);
+      if (scale_coulomb != 1.0)
+        jop->scale(scale_coulomb);
+      *this += *jop;
     }
     // when gradient is requested..
     if (store_half_)
       half_ = half;
   } else {
-    *this += *df->compute_Jop(density_);
+    shared_ptr<Matrix> jop = df->compute_Jop(density_);
+    if (scale_coulomb != 1.0)
+      jop->scale(scale_coulomb);
+    *this += *jop;
   }
   pdebug.tick_print("Coulomb build");
 

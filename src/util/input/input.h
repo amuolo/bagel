@@ -1,5 +1,5 @@
 //
-// BAGEL - Parallel electron correlation program.
+// BAGEL - Brilliantly Advanced General Electronic Structure Library
 // Filename: input.h
 // Copyright (C) 2013 Toru Shiozaki
 //
@@ -8,26 +8,26 @@
 //
 // This file is part of the BAGEL package.
 //
-// The BAGEL package is free software; you can redistribute it and/or modify
-// it under the terms of the GNU Library General Public License as published by
-// the Free Software Foundation; either version 3, or (at your option)
-// any later version.
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
 //
-// The BAGEL package is distributed in the hope that it will be useful,
+// This program is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-// GNU Library General Public License for more details.
+// GNU General Public License for more details.
 //
-// You should have received a copy of the GNU Library General Public License
-// along with the BAGEL package; see COPYING.  If not, write to
-// the Free Software Foundation, 675 Mass Ave, Cambridge, MA 02139, USA.
+// You should have received a copy of the GNU General Public License
+// along with this program.  If not, see <http://www.gnu.org/licenses/>.
 //
 
 #ifndef __SRC_INPUT_INPUT_H
 #define __SRC_INPUT_INPUT_H
 
 #include <vector>
-#include <src/util/string.h>
+#include <sstream>
+#include <src/util/string_util.h>
 #include <src/util/serialization.h>
 #include <boost/property_tree/ptree.hpp>
 
@@ -95,24 +95,33 @@ class PTree {
 
   public:
     PTree() : data_() {}
-
     PTree(const boost::property_tree::ptree& i, const std::string key) : data_(i), key_(key) { }
-
     PTree(const PTree& o) : data_(o.data_), key_(o.key_) { }
-
+    // constructor from an input file
     PTree(const std::string& input);
+    // constructor from a stringify'ed json object
+    PTree(std::stringstream& input);
 
-    std::shared_ptr<PTree> get_child(const std::string& key) const {
-      return std::make_shared<PTree>(data_.get_child(key), key);
-    }
+    std::shared_ptr<PTree> get_child(const std::string& key) const;
+    std::shared_ptr<PTree> get_child_optional(const std::string& key) const;
 
-    std::shared_ptr<PTree> get_child_optional(const std::string& key) const {
-      auto out = data_.get_child_optional(key);
-      return out ? std::make_shared<PTree>(*out, key) : nullptr;
-    }
-
-    template<typename T> T get(const std::string s) const { return data_.get<T>(s); }
     template<typename T> T get(const std::string s, const T& t) const { return data_.get<T>(s, t); }
+    template<typename T> T get(const std::string s) const {
+      T out;
+      try {
+        out = data_.get<T>(s);
+
+      // just to make error messages more user-friendly
+      } catch (const std::exception& e) {
+        if (std::string(e.what()).find("No such node") != std::string::npos) {
+          std::string thiskey = get<std::string>("title", key_);
+          throw std::runtime_error("A required keyword is missing from the input" + (thiskey.size() ? " for " + thiskey : "") + ":  " + s);
+        } else {
+          throw;
+        }
+      }
+      return out;
+    }
 
     void add_child(const std::string s, std::shared_ptr<PTree> ch) { data_.add_child(s, ch->data_); }
     template<typename T> void put(const std::string s, const T& o) { data_.put<T>(s, o); }

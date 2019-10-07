@@ -1,38 +1,35 @@
 //
-// BAGEL - Parallel electron correlation program.
+// BAGEL - Brilliantly Advanced General Electronic Structure Library
 // Filename: dimer.h
-// Copyright (C) 2012 Shane Parker
+// Copyright (C) 2012 Toru Shiozaki
 //
 // Author: Shane Parker <shane.parker@u.northwestern.edu>
 // Maintainer: NU theory
 //
 // This file is part of the BAGEL package.
 //
-// The BAGEL package is free software; you can redistribute it and/or modify
-// it under the terms of the GNU Library General Public License as published by
-// the Free Software Foundation; either version 3, or (at your option)
-// any later version.
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
 //
-// The BAGEL package is distributed in the hope that it will be useful,
+// This program is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-// GNU Library General Public License for more details.
+// GNU General Public License for more details.
 //
-// You should have received a copy of the GNU Library General Public License
-// along with the BAGEL package; see COPYING.  If not, write to
-// the Free Software Foundation, 675 Mass Ave, Cambridge, MA 02139, USA.
+// You should have received a copy of the GNU General Public License
+// along with this program.  If not, see <http://www.gnu.org/licenses/>.
 //
 
 #ifndef __SRC_DIMER_DIMER_H
 #define __SRC_DIMER_DIMER_H
 
-#include <src/ci/fci/distfci.h>
 #include <src/ci/fci/knowles.h>
 #include <src/ci/fci/harrison.h>
 #include <src/ci/ras/rasci.h>
-#include <src/ci/ras/distrasci.h>
 #include <src/asd/dimer/dimer_cispace.h>
-#include <src/wfn/construct_method.h>
+#include <src/wfn/get_energy.h>
 #include <src/util/muffle.h>
 
 namespace bagel {
@@ -60,13 +57,14 @@ class Dimer : public std::enable_shared_from_this<Dimer> {
     std::shared_ptr<const Reference>  sref_;
 
     double active_thresh_;                                    ///< overlap threshold for inclusion in the active space
+    bool print_orbital_;
 
   public:
     // Constructors
     Dimer(std::shared_ptr<const PTree> input, Ref<Geometry> a, Ref<Geometry> b); ///< Conjoins the provided Geometry objects
     Dimer(std::shared_ptr<const PTree> input, Ref<Geometry> a); ///< Duplicates provided Geometry according to translation vector specified in input
     Dimer(std::shared_ptr<const PTree> input, Ref<Reference> A, Ref<Reference> B); ///< Conjoins the provided Reference objects
-    Dimer(std::shared_ptr<const PTree> input, Ref<Reference> a); ///< Duplicates provided Reference according to translation vector specified in input
+    Dimer(std::shared_ptr<const PTree> input, Ref<Reference> a, const bool linked = false); ///< Duplicates provided Reference according to translation vector specified in input (false) / linked dimer (true)
 
     // Return functions
     std::pair<Ref<Geometry>, Ref<Geometry>> geoms() const { return geoms_; };
@@ -83,6 +81,13 @@ class Dimer : public std::enable_shared_from_this<Dimer> {
     /// Localizes active space and uses the given Fock matrix to diagonalize the subspaces
     void localize(std::shared_ptr<const PTree> idata, std::shared_ptr<const Matrix> fock, const bool localize_first);
 
+    // Linked dimers
+    void set_active(std::shared_ptr<const PTree> idata);
+    void reduce_active(std::shared_ptr<const PTree> idata);
+    std::shared_ptr<Matrix> form_reference_active_coeff() const;
+    std::shared_ptr<Matrix> form_semi_canonical_coeff(std::shared_ptr<const PTree> idata) const;
+    std::shared_ptr<Matrix> overlap_selection(std::shared_ptr<const Matrix> control, std::shared_ptr<const Matrix> treatment) const;
+
     // Calculations
     void scf(std::shared_ptr<const PTree> idata); ///< Driver for preparation of dimer for MultiExcitonHamiltonian or CI calculation
 
@@ -96,8 +101,11 @@ class Dimer : public std::enable_shared_from_this<Dimer> {
     /// Creates a Reference object for a MEH or ASD calculation
     std::shared_ptr<Reference> build_reference(const int site, const std::vector<bool> meanfield) const;
 
+    // Update
+    void update_coeff(std::shared_ptr<const Matrix> coeff);
+
   private:
-    void construct_geometry(); ///< Forms super geometry (sgeom_) and optionally projects isolated geometries and supergeometry to a specified basis
+    void construct_geometry(const bool linked = false); ///< Forms super geometry (sgeom_) and optionally projects isolated geometries and supergeometry to a specified basis
     void embed_refs();         ///< Forms two references to be used in CI calculations where the inactive monomer is included as "embedding"
     /// Reads information on monomer subspaces from input
     void get_spaces(std::shared_ptr<const PTree> idata, std::vector<std::vector<int>>& spaces_A, std::vector<std::vector<int>>& spaces_B);
@@ -107,7 +115,7 @@ class Dimer : public std::enable_shared_from_this<Dimer> {
     std::shared_ptr<const Matrix> form_projected_coeffs();
 
     /// Lowdin orthogonalizes the result of form_projected_coeffs
-    std::shared_ptr<const Matrix> construct_coeff();
+    std::shared_ptr<const Matrix> construct_coeff(const bool linked = false);
 
     /// Runs a single set of monomer CAS/RAS calculations as specified
     template <class CIMethod, class VecType>
@@ -186,11 +194,6 @@ std::shared_ptr<DimerCISpace_base<VecType>> Dimer::compute_cispace(const std::sh
           tmp.push_back(std::make_shared<CiType>(*i));
         results.push_back(std::make_shared<VecType>(tmp));
       }
-#if 0
-      // TODO this block does not compile
-      else if (std::find(dist_options.begin(), dist_options.end(), method) != dist_options.end())
-        results.push_back(std::make_shared<VecType>(embedded_ci<DistFCI, DistDvec>(input_copy, eref, ispace.at(0), ispace.at(1), ispace.at(2), label)));
-#endif
       else
         throw std::runtime_error("Unrecognized FCI type algorithm");
 
@@ -285,8 +288,6 @@ std::shared_ptr<DimerCISpace_base<VecType>> Dimer::compute_rcispace(const std::s
 
       if (std::find(serial_options.begin(), serial_options.end(), method) != serial_options.end())
         results.push_back(std::make_shared<VecType>(embedded_ci<RASCI, RASDvec>(input_copy, eref, ispace.at(0), ispace.at(1), ispace.at(2), label)));
-      else if (std::find(dist_options.begin(), dist_options.end(), method) != dist_options.end())
-        results.push_back(std::make_shared<VecType>(embedded_ci<DistRASCI, DistRASDvec>(input_copy, eref, ispace.at(0), ispace.at(1), ispace.at(2), label)));
       else
         throw std::logic_error("Unrecognized RAS type algorithm");
 

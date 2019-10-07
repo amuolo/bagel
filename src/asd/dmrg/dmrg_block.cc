@@ -1,133 +1,34 @@
 //
-// BAGEL - Parallel electron correlation program.
+// BAGEL - Brilliantly Advanced General Electronic Structure Library
 // Filename: dmrg_block.cc
 // Copyright (C) 2014 Toru Shiozaki
 //
 // Author: Toru Shiozaki <shiozaki@northwestern.edu>
-// Maintainer: NU theory
+// Maintainer: Shiozaki Group
 //
 // This file is part of the BAGEL package.
 //
-// The BAGEL package is free software; you can redistribute it and/or modify
-// it under the terms of the GNU Library General Public License as published by
-// the Free Software Foundation; either version 3, or (at your option)
-// any later version.
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
 //
-// The BAGEL package is distributed in the hope that it will be useful,
+// This program is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-// GNU Library General Public License for more details.
+// GNU General Public License for more details.
 //
-// You should have received a copy of the GNU Library General Public License
-// along with the BAGEL package; see COPYING.  If not, write to
-// the Free Software Foundation, 675 Mass Ave, Cambridge, MA 02139, USA.
+// You should have received a copy of the GNU General Public License
+// along with this program.  If not, see <http://www.gnu.org/licenses/>.
 //
 
 #include <algorithm>
 
 #include <src/asd/dmrg/dmrg_block.h>
-#include <src/ci/ras/civector.h>
 #include <src/asd/dmrg/kronecker.h>
 
 using namespace bagel;
 using namespace std;
-
-DMRG_Block1::DMRG_Block1(GammaForestASD<RASDvec>&& forest, const map<BlockKey, shared_ptr<const Matrix>> h2e, const map<BlockKey,
-           shared_ptr<const Matrix>> spin, shared_ptr<const Matrix> coeff) : DMRG_Block(coeff), H2e_(h2e), spin_(spin) {
-  Timer dmrgtime(2);
-
-  // Build set of blocks
-  for (auto& i : h2e) {
-    assert(i.second->ndim() == i.second->mdim());
-    blocks_.emplace(i.first.nelea, i.first.neleb, i.second->ndim());
-  }
-  dmrgtime.tick_print("prepare blocks");
-
-  // initialize operator space
-  for (auto o : forest.sparselist()) {
-    list<GammaSQ> gammalist = get<0>(o);
-
-    BlockInfo brakey = get<1>(o);
-    BlockInfo ketkey = get<2>(o);
-
-    assert(blocks_.count(brakey));
-    assert(blocks_.count(ketkey));
-
-    const int bratag = forest.block_tag(brakey);
-    const int kettag = forest.block_tag(ketkey);
-
-    assert(forest.template exist<0>(bratag, kettag, gammalist));
-    shared_ptr<const Matrix> mat = forest.template get<0>(bratag, kettag, gammalist);
-    btas::CRange<3> range(brakey.nstates, ketkey.nstates, lrint(pow(norb(), gammalist.size())));
-    // checking ndim
-    assert(mat->ndim() == range.extent(0)*range.extent(1));
-    // checking mdim
-    assert(mat->mdim() == range.extent(2));
-    // internal check
-    assert(mat->storage().size() == range.area());
-    // convert this matrix to 3-tensor
-    auto tensor = make_shared<btas::Tensor3<double>>(range, move(mat->storage()));
-#ifdef DEBUG
-    resources__->proc()->cout_on();
-    for (int i = 0; i < mpi__->size(); ++i) {
-      if (i==mpi__->rank())
-        cout << "rank " << mpi__->rank() << " broadcast size " << tensor->size() << endl;
-      mpi__->barrier();
-      this_thread::sleep_for(10 * sleeptime__);
-    }
-    resources__->proc()->cout_off();
-#endif
-#ifdef HAVE_MPI_H
-    mpi__->broadcast(tensor->data(), tensor->size(), 0);
-    dmrgtime.tick_print("broadcast");
-#endif
-    // add matrix
-    CouplingBlock cb(brakey, ketkey, tensor);
-    sparse_[gammalist].emplace(cb.key(), cb);
-  }
-}
-
-DMRG_Block1::DMRG_Block1(GammaForestProdASD&& forest, const map<BlockKey, shared_ptr<const Matrix>> h2e,
-                                                    const map<BlockKey, shared_ptr<const Matrix>> spin,
-                                                    shared_ptr<const Matrix> coeff) : DMRG_Block(coeff), H2e_(h2e), spin_(spin) {
-  Timer dmrgtime(2);
-
-  // Build set of blocks
-  for (auto& i : h2e) {
-    assert(i.second->ndim() == i.second->mdim());
-    blocks_.emplace(i.first.nelea, i.first.neleb, i.second->ndim());
-  }
-  dmrgtime.tick_print("build block info");
-
-  // initialize operator space
-  for (auto o : forest.sparselist()) {
-    list<GammaSQ> gammalist = get<0>(o);
-
-    BlockInfo brakey = get<1>(o);
-    BlockInfo ketkey = get<2>(o);
-
-    assert(blocks_.count(brakey));
-    assert(blocks_.count(ketkey));
-
-    assert(forest.exist(brakey, ketkey, gammalist));
-    shared_ptr<const Matrix> mat = forest.get(brakey, ketkey, gammalist);
-    btas::CRange<3> range(brakey.nstates, ketkey.nstates, lrint(pow(norb(), gammalist.size())));
-    // checking ndim
-    assert(mat->ndim() == range.extent(0)*range.extent(1));
-    // checking mdim
-    assert(mat->mdim() == range.extent(2));
-    // internal check
-    assert(mat->storage().size() == range.area());
-    // convert this matrix to 3-tensor
-    auto tensor = make_shared<btas::Tensor3<double>>(range, move(mat->storage()));
-#ifdef HAVE_MPI_H
-    mpi__->broadcast(tensor->data(), tensor->size(), 0);
-#endif
-    // add matrix
-    CouplingBlock cb(brakey, ketkey, tensor);
-    sparse_[gammalist].emplace(cb.key(), cb);
-  }
-}
 
 string DMRG_Block1::block_info_to_string(const BlockKey bk, const int state) const {
   stringstream ss;
@@ -165,7 +66,7 @@ shared_ptr<const BlockOperators> DMRG_Block1::compute_block_ops(shared_ptr<Dimer
   return make_shared<BlockOperators1>(shared_from_this(), jop);
 }
 
-DMRG_Block2::DMRG_Block2(shared_ptr<const DMRG_Block1> lb, std::shared_ptr<const DMRG_Block1> rb) : left_block_(lb), right_block_(rb) {
+DMRG_Block2::DMRG_Block2(shared_ptr<const DMRG_Block1> lb, shared_ptr<const DMRG_Block1> rb) : left_block_(lb), right_block_(rb) {
   // left block runs first in the resulting pairmap_ vectors
   for (auto& left : lb->blocks()) {
     for (auto& right : rb->blocks()) {
@@ -350,6 +251,6 @@ shared_ptr<Matrix> DMRG_Block2::spin_raise(const BlockKey b) const {
   return out;
 }
 
-shared_ptr<const BlockOperators> DMRG_Block2::compute_block_ops(std::shared_ptr<DimerJop> jop) const {
+shared_ptr<const BlockOperators> DMRG_Block2::compute_block_ops(shared_ptr<DimerJop> jop) const {
   return make_shared<BlockOperators2>(shared_from_this(), jop);
 }

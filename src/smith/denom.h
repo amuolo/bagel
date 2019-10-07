@@ -1,5 +1,5 @@
 //
-// BAGEL - Parallel electron correlation program.
+// BAGEL - Brilliantly Advanced General Electronic Structure Library
 // Filename: denom.h
 // Copyright (C) 2015 Toru Shiozaki
 //
@@ -8,19 +8,18 @@
 //
 // This file is part of the BAGEL package.
 //
-// The BAGEL package is free software; you can redistribute it and/or modify
-// it under the terms of the GNU Library General Public License as published by
-// the Free Software Foundation; either version 3, or (at your option)
-// any later version.
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
 //
-// The BAGEL package is distributed in the hope that it will be useful,
+// This program is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-// GNU Library General Public License for more details.
+// GNU General Public License for more details.
 //
-// You should have received a copy of the GNU Library General Public License
-// along with the BAGEL package; see COPYING.  If not, write to
-// the Free Software Foundation, 675 Mass Ave, Cambridge, MA 02139, USA.
+// You should have received a copy of the GNU General Public License
+// along with this program.  If not, see <http://www.gnu.org/licenses/>.
 //
 
 #ifndef __SRC_SMITH_DENOM_H
@@ -36,76 +35,100 @@ template<typename DataType>
 class Denom {
   protected:
     using MatType = typename std::conditional<std::is_same<DataType,double>::value,Matrix,ZMatrix>::type;
+    using ViewType = typename std::conditional<std::is_same<DataType,double>::value,MatView,ZMatView>::type;
 
   protected:
     std::shared_ptr<const MatType> fock_;
     const double thresh_;
-
-    std::shared_ptr<MatType> shalf_x_;
-    std::shared_ptr<MatType> shalf_h_;
-    std::shared_ptr<MatType> shalf_xx_;
-    std::shared_ptr<MatType> shalf_hh_;
-    std::shared_ptr<MatType> shalf_xh_;
-    std::shared_ptr<MatType> shalf_xhh_;
-    std::shared_ptr<MatType> shalf_xxh_;
-
-    std::shared_ptr<MatType> work_x_;
-    std::shared_ptr<MatType> work_h_;
-    std::shared_ptr<MatType> work_xx_;
-    std::shared_ptr<MatType> work_hh_;
-    std::shared_ptr<MatType> work_xh_;
-    std::shared_ptr<MatType> work_xhh_;
-    std::shared_ptr<MatType> work_xxh_;
-
-    VectorB denom_x_;
-    VectorB denom_h_;
-    VectorB denom_xx_;
-    VectorB denom_hh_;
-    VectorB denom_xh_;
-    VectorB denom_xhh_;
-    VectorB denom_xxh_;
+    const size_t nstates_;
+    std::map<std::string,size_t> dim_;
 
     // init functions
-    void init_x_(const int, const int, std::shared_ptr<const RDM<1,DataType>>, std::shared_ptr<const RDM<2,DataType>>,
-                                       std::shared_ptr<const RDM<3,DataType>>, std::shared_ptr<const RDM<4,DataType>>);
-    void init_h_(const int, const int, std::shared_ptr<const RDM<1,DataType>>, std::shared_ptr<const RDM<2,DataType>>,
-                                       std::shared_ptr<const RDM<3,DataType>>, std::shared_ptr<const RDM<4,DataType>>);
-    void init_xx_(const int, const int, std::shared_ptr<const RDM<1,DataType>>, std::shared_ptr<const RDM<2,DataType>>,
-                                        std::shared_ptr<const RDM<3,DataType>>, std::shared_ptr<const RDM<4,DataType>>);
-    void init_hh_(const int, const int, std::shared_ptr<const RDM<1,DataType>>, std::shared_ptr<const RDM<2,DataType>>,
-                                        std::shared_ptr<const RDM<3,DataType>>, std::shared_ptr<const RDM<4,DataType>>);
-    void init_xh_(const int, const int, std::shared_ptr<const RDM<1,DataType>>, std::shared_ptr<const RDM<2,DataType>>,
-                                        std::shared_ptr<const RDM<3,DataType>>, std::shared_ptr<const RDM<4,DataType>>);
-    void init_xhh_(const int, const int, std::shared_ptr<const RDM<1,DataType>>, std::shared_ptr<const RDM<2,DataType>>,
-                                         std::shared_ptr<const RDM<3,DataType>>, std::shared_ptr<const RDM<4,DataType>>);
-    void init_xxh_(const int, const int, std::shared_ptr<const RDM<1,DataType>>, std::shared_ptr<const RDM<2,DataType>>,
-                                         std::shared_ptr<const RDM<3,DataType>>, std::shared_ptr<const RDM<4,DataType>>);
+    void init_(const std::string& tag, const int, const int,
+               std::shared_ptr<const RDM<1,DataType>>, std::shared_ptr<const RDM<2,DataType>>,
+               std::shared_ptr<const RDM<3,DataType>>, std::shared_ptr<const RDM<3,DataType>>);
+    virtual void set_sblock(const std::string tag, const int, const int, const btas::TensorView2<DataType> data) = 0;
+    virtual void set_wblock(const std::string tag, const int, const int, const btas::TensorView2<DataType> data) = 0;
 
   public:
-    Denom(std::shared_ptr<const MatType> fock, const int nstates, const double th = 1.0e-8);
+    Denom(std::shared_ptr<const MatType> fock, const int nstates, const double thresh_overlap);
 
-    // add RDMs
+    // add RDMs (using fock-multiplied 4RDM)
     void append(const int jst, const int ist, std::shared_ptr<const RDM<1,DataType>>, std::shared_ptr<const RDM<2,DataType>>,
-                                              std::shared_ptr<const RDM<3,DataType>>, std::shared_ptr<const RDM<4,DataType>>);
+                                              std::shared_ptr<const RDM<3,DataType>>, std::shared_ptr<const RDM<3,DataType>>);
     // diagonalize and set to shalf and denom
-    void compute();
+    virtual void compute() = 0;
 
-    std::shared_ptr<const MatType> shalf_x() const { return shalf_x_; }
-    std::shared_ptr<const MatType> shalf_h() const { return shalf_h_; }
-    std::shared_ptr<const MatType> shalf_xx() const { return shalf_xx_; }
-    std::shared_ptr<const MatType> shalf_hh() const { return shalf_hh_; }
-    std::shared_ptr<const MatType> shalf_xh() const { return shalf_xh_; }
-    std::shared_ptr<const MatType> shalf_xhh() const { return shalf_xhh_; }
-    std::shared_ptr<const MatType> shalf_xxh() const { return shalf_xxh_; }
+    virtual const ViewType shalf(const std::string, const int) const = 0;
+    virtual double denom(const std::string& tag, const int ist, const size_t i) const = 0;
+};
 
-    const double& denom_x(const size_t i) const { return denom_x_(i); }
-    const double& denom_h(const size_t i) const { return denom_h_(i); }
-    const double& denom_xx(const size_t i) const { return denom_xx_(i); }
-    const double& denom_hh(const size_t i) const { return denom_hh_(i); }
-    const double& denom_xh(const size_t i) const { return denom_xh_(i); }
-    const double& denom_xhh(const size_t i) const { return denom_xhh_(i); }
-    const double& denom_xxh(const size_t i) const { return denom_xxh_(i); }
 
+template<typename DataType>
+class Denom_SSSR : public Denom<DataType> {
+  protected:
+    using Denom<DataType>::thresh_;
+    using Denom<DataType>::nstates_;
+    using Denom<DataType>::dim_;
+    using Denom<DataType>::fock_;
+    using MatType = typename std::conditional<std::is_same<DataType,double>::value,Matrix,ZMatrix>::type;
+    using ViewType = typename std::conditional<std::is_same<DataType,double>::value,MatView,ZMatView>::type;
+
+  protected:
+    std::map<std::string,std::vector<std::shared_ptr<MatType>>> shalf_;
+    std::map<std::string,std::vector<std::shared_ptr<MatType>>> work_;
+    std::map<std::string,std::vector<VectorB>> denom_;
+
+    void set_sblock(const std::string tag, const int jst, const int ist, const btas::TensorView2<DataType> o) override {
+      assert(jst == ist && o.size() == shalf_.at(tag)[ist]->size());
+      std::copy_n(&*o.begin(), o.size(), shalf_.at(tag)[ist]->data());
+    }
+    void set_wblock(const std::string tag, const int jst, const int ist, const btas::TensorView2<DataType> o) override {
+      assert(jst == ist && o.size() == work_.at(tag)[ist]->size());
+      std::copy_n(&*o.begin(), o.size(), work_.at(tag)[ist]->data());
+    }
+
+  public:
+    Denom_SSSR(std::shared_ptr<const MatType> fock, const int nstates, const double thresh_overlap);
+
+    const ViewType shalf(const std::string tag, const int ist) const { return *(shalf_.at(tag)[ist]); }
+    void compute() override;
+    double denom(const std::string& tag, const int ist, const size_t i) const override { return denom_.at(tag)[ist](i); }
+};
+
+
+template<typename DataType>
+class Denom_MSMR : public Denom<DataType> {
+  protected:
+    using Denom<DataType>::thresh_;
+    using Denom<DataType>::dim_;
+    using Denom<DataType>::fock_;
+    using MatType = typename std::conditional<std::is_same<DataType,double>::value,Matrix,ZMatrix>::type;
+    using ViewType = typename std::conditional<std::is_same<DataType,double>::value,MatView,ZMatView>::type;
+
+  protected:
+    std::map<std::string,std::shared_ptr<MatType>> shalf_;
+    std::map<std::string,std::shared_ptr<MatType>> work_;
+    std::map<std::string, VectorB> denom_;
+
+    void set_sblock(const std::string tag, const int jst, const int ist, const btas::TensorView2<DataType> o) override {
+      const size_t dim = dim_.at(tag);
+      shalf_.at(tag)->copy_block(jst*dim, ist*dim, dim, dim, o);
+    }
+    void set_wblock(const std::string tag, const int jst, const int ist, const btas::TensorView2<DataType> o) override {
+      const size_t dim = dim_.at(tag);
+      work_.at(tag)->copy_block(jst*dim, ist*dim, dim, dim, o);
+    }
+
+  public:
+    Denom_MSMR(std::shared_ptr<const MatType> fock, const int nstates, const double thresh_overlap);
+
+    const ViewType shalf(const std::string tag, const int ist) const {
+      const size_t dim = dim_.at(tag);
+      return shalf_.at(tag)->slice(ist*dim, (ist+1)*dim);
+    }
+    void compute() override;
+    double denom(const std::string& tag, const int ist, const size_t i) const override { return denom_.at(tag)(i); }
 };
 
 extern template class Denom<double>;

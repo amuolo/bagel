@@ -1,5 +1,5 @@
 //
-// BAGEL - Parallel electron correlation program.
+// BAGEL - Brilliantly Advanced General Electronic Structure Library
 // Filename: zharrison_compute.cc
 // Copyright (C) 2013 Toru Shiozaki
 //
@@ -8,19 +8,18 @@
 //
 // This file is part of the BAGEL package.
 //
-// The BAGEL package is free software; you can redistribute it and/or modify
-// it under the terms of the GNU Library General Public License as published by
-// the Free Software Foundation; either version 3, or (at your option)
-// any later version.
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
 //
-// The BAGEL package is distributed in the hope that it will be useful,
+// This program is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-// GNU Library General Public License for more details.
+// GNU General Public License for more details.
 //
-// You should have received a copy of the GNU Library General Public License
-// along with the BAGEL package; see COPYING.  If not, write to
-// the Free Software Foundation, 675 Mass Ave, Cambridge, MA 02139, USA.
+// You should have received a copy of the GNU General Public License
+// along with this program.  If not, see <http://www.gnu.org/licenses/>.
 //
 
 #include <src/ci/zfci/zharrison.h>
@@ -34,7 +33,7 @@ using namespace bagel;
 
 /* Implementing the method as described by Harrison and Zarrabian */
 #ifndef HAVE_MPI_H
-shared_ptr<RelZDvec> ZHarrison::form_sigma(shared_ptr<const RelZDvec> ccvec, shared_ptr<const RelMOFile> jop, const vector<int>& conv) const {
+shared_ptr<RelZDvec> ZHarrison::form_sigma(shared_ptr<const RelZDvec> ccvec, shared_ptr<const ZMOFile> jop, const vector<int>& conv) const {
   auto sigmavec = make_shared<RelZDvec>(space_, nstate_);
   auto sigmavec_trans = sigmavec->clone(); // important note: the space stays the same after transposition
 
@@ -72,7 +71,7 @@ shared_ptr<RelZDvec> ZHarrison::form_sigma(shared_ptr<const RelZDvec> ccvec, sha
 
 #else
 
-shared_ptr<RelZDvec> ZHarrison::form_sigma(shared_ptr<const RelZDvec> ccvec, shared_ptr<const RelMOFile> jop, const vector<int>& conv) const {
+shared_ptr<RelZDvec> ZHarrison::form_sigma(shared_ptr<const RelZDvec> ccvec, shared_ptr<const ZMOFile> jop, const vector<int>& conv) const {
   auto sigmavec = make_shared<RelZDvec>(space_, nstate_);
   auto sigmavec_trans = sigmavec->clone(); // important note: the space stays the same after transposition
 
@@ -112,7 +111,7 @@ shared_ptr<RelZDvec> ZHarrison::form_sigma(shared_ptr<const RelZDvec> ccvec, sha
 #endif
 
 
-void ZHarrison::sigma_one(shared_ptr<const ZCivec> cc, shared_ptr<RelZDvec> sigmavec, shared_ptr<const RelMOFile> jop,
+void ZHarrison::sigma_one(shared_ptr<const ZCivec> cc, shared_ptr<RelZDvec> sigmavec, shared_ptr<const ZMOFile> jop,
                           const int istate, const bool diag, const bool trans) const {
   Timer pdebug(2);
 
@@ -198,7 +197,7 @@ void ZHarrison::sigma_one(shared_ptr<const ZCivec> cc, shared_ptr<RelZDvec> sigm
 }
 
 
-void ZHarrison::sigma_aa(shared_ptr<const ZCivec> cc, shared_ptr<ZCivec> sigma, shared_ptr<const RelMOFile> jop, const bool trans) const {
+void ZHarrison::sigma_aa(shared_ptr<const ZCivec> cc, shared_ptr<ZCivec> sigma, shared_ptr<const ZMOFile> jop, const bool trans) const {
   assert(cc->det()->nelea() == sigma->det()->nelea());
   assert(cc->det()->neleb() == sigma->det()->neleb());
 
@@ -225,7 +224,7 @@ void ZHarrison::sigma_aa(shared_ptr<const ZCivec> cc, shared_ptr<ZCivec> sigma, 
 }
 
 
-void ZHarrison::sigma_1e_ab(shared_ptr<const ZCivec> cc, shared_ptr<ZCivec> sigma, shared_ptr<const RelMOFile> jop, const bool trans) const {
+void ZHarrison::sigma_1e_ab(shared_ptr<const ZCivec> cc, shared_ptr<ZCivec> sigma, shared_ptr<const ZMOFile> jop, const bool trans) const {
   assert(cc->det()->nelea()-1 == sigma->det()->nelea());
   assert(cc->det()->neleb()+1 == sigma->det()->neleb());
 
@@ -395,7 +394,7 @@ void ZHarrison::sigma_2e_create_bb(shared_ptr<ZCivec> sigma, shared_ptr<const ZD
 
 //////////////// functions for multiplication of the Hamiltonian ///////////////
 
-void ZHarrison::sigma_2e_h0101_h1001(shared_ptr<const ZDvec> d, shared_ptr<ZDvec> e, shared_ptr<const RelMOFile> jop) const {
+void ZHarrison::sigma_2e_h0101_h1001(shared_ptr<const ZDvec> d, shared_ptr<ZDvec> e, shared_ptr<const ZMOFile> jop) const {
   ZMatrix tmp(*jop->mo2e("0101"));
   sort_indices<1,0,2,3,1,1,-1,1>(jop->mo2e("1001")->data(), tmp.data(), norb_, norb_, norb_, norb_);
   contract(1.0, *d, {0,1,2}, tmp, {3,2}, 0.0, *e, {0,1,3});

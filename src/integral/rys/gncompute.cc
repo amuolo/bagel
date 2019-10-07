@@ -1,5 +1,5 @@
 //
-// BAGEL - Parallel electron correlation program.
+// BAGEL - Brilliantly Advanced General Electronic Structure Library
 // Filename: gncompute.cc
 // Copyright (C) 2012 Toru Shiozaki
 //
@@ -8,19 +8,18 @@
 //
 // This file is part of the BAGEL package.
 //
-// The BAGEL package is free software; you can redistribute it and/or modify
-// it under the terms of the GNU Library General Public License as published by
-// the Free Software Foundation; either version 3, or (at your option)
-// any later version.
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
 //
-// The BAGEL package is distributed in the hope that it will be useful,
+// This program is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-// GNU Library General Public License for more details.
+// GNU General Public License for more details.
 //
-// You should have received a copy of the GNU Library General Public License
-// along with the BAGEL package; see COPYING.  If not, write to
-// the Free Software Foundation, 675 Mass Ave, Cambridge, MA 02139, USA.
+// You should have received a copy of the GNU General Public License
+// along with this program.  If not, see <http://www.gnu.org/licenses/>.
 //
 
 #include <src/integral/carsphlist.h>
@@ -96,27 +95,18 @@ void GNAIBatch::compute() {
   const SortList sort(spherical1_);
 
   // perform VRR
-  const int natom_unit = natom_ / (2 * L_ + 1);
-  assert(natom_ % (2 * L_ + 1) == 0);
   for (int xj = 0; xj != screening_size_; ++xj) {
     const int i = screening_[xj];
     const int iprim = i / natom_;
-    const int resid = i % natom_;
-    const int cell  = resid / natom_unit - L_;
-    const int iatom = resid % natom_unit;
-    double disp[3];
-    disp[0] = disp[1] = 0.0;
-    disp[2] = A_ * cell;
+    const int iatom = i % natom_;
     const int offset_iprim = iprim * acsize;
-
-    if (cell != 0) throw logic_error("I haven't thought about periodic cases");
 
     const double* croots = &roots_[i * rank_];
     const double* cweights = &weights_[i * rank_];
     double PC[3];
-    PC[0] = P_[i*3  ] - mol_->atoms(iatom)->position(0) - disp[0];
-    PC[1] = P_[i*3+1] - mol_->atoms(iatom)->position(1) - disp[1];
-    PC[2] = P_[i*3+2] - mol_->atoms(iatom)->position(2) - disp[2];
+    PC[0] = P_[i*3  ] - mol_->atoms(iatom)->position(0);
+    PC[1] = P_[i*3+1] - mol_->atoms(iatom)->position(1);
+    PC[2] = P_[i*3+2] - mol_->atoms(iatom)->position(2);
     for (int r = 0; r != rank_; ++r) {
       r1x[r] = P_[i*3  ] - ax - PC[0] * croots[r];
       r1y[r] = P_[i*3+1] - ay - PC[1] * croots[r];

@@ -1,5 +1,5 @@
 //
-// BAGEL - Parallel electron correlation program.
+// BAGEL - Brilliantly Advanced General Electronic Structure Library
 // Filename: xyzfile.cc
 // Copyright (C) 2012 Toru Shiozaki
 //
@@ -8,19 +8,18 @@
 //
 // This file is part of the BAGEL package.
 //
-// The BAGEL package is free software; you can redistribute it and/or modify
-// it under the terms of the GNU Library General Public License as published by
-// the Free Software Foundation; either version 3, or (at your option)
-// any later version.
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
 //
-// The BAGEL package is distributed in the hope that it will be useful,
+// This program is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-// GNU Library General Public License for more details.
+// GNU General Public License for more details.
 //
-// You should have received a copy of the GNU Library General Public License
-// along with the BAGEL package; see COPYING.  If not, write to
-// the Free Software Foundation, 675 Mass Ave, Cambridge, MA 02139, USA.
+// You should have received a copy of the GNU General Public License
+// along with this program.  If not, see <http://www.gnu.org/licenses/>.
 //
 
 #include <iomanip>
@@ -46,6 +45,16 @@ void XYZFile::print(const string in, const int dummy) const {
   }
 }
 
+void XYZFile::print_export(const string in, const int dummy) const {
+  auto matform = make_shared<Matrix>(mdim(), 3);
+  for (int i = 0; i != mdim(); ++i) {
+    matform->element(i, 0) = element(0, i);
+    matform->element(i, 1) = element(1, i);
+    matform->element(i, 2) = element(2, i);
+  }
+  matform->print();
+}
+
 
 shared_ptr<XYZFile> XYZFile::transform(const shared_ptr<const Matrix> a, const bool transpose) const {
   // a is ncart * ninternal quantity
@@ -56,4 +65,15 @@ shared_ptr<XYZFile> XYZFile::transform(const shared_ptr<const Matrix> a, const b
     dgemv_("N", a->ndim(), a->mdim(), 1.0, a->data(), a->ndim(), data(), 1, 0.0, out->data(), 1);
   }
   return out;
+}
+
+double XYZFile::maximum(int atomno) const {
+  double maximum = -1000.0;
+  for (int i = 0; i != atomno; ++i) {
+    if (fabs(element(0,i)) > maximum) maximum = fabs(element(0,i));
+    if (fabs(element(1,i)) > maximum) maximum = fabs(element(1,i));
+    if (fabs(element(2,i)) > maximum) maximum = fabs(element(2,i));
+  }
+
+  return maximum;
 }

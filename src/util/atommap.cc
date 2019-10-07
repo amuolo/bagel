@@ -1,5 +1,5 @@
 //
-// BAGEL - Parallel electron correlation program.
+// BAGEL - Brilliantly Advanced General Electronic Structure Library
 // Filename: atommap.cc
 // Copyright (C) 2009 Toru Shiozaki
 //
@@ -8,19 +8,18 @@
 //
 // This file is part of the BAGEL package.
 //
-// The BAGEL package is free software; you can redistribute it and/or modify
-// it under the terms of the GNU Library General Public License as published by
-// the Free Software Foundation; either version 3, or (at your option)
-// any later version.
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
 //
-// The BAGEL package is distributed in the hope that it will be useful,
+// This program is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-// GNU Library General Public License for more details.
+// GNU General Public License for more details.
 //
-// You should have received a copy of the GNU Library General Public License
-// along with the BAGEL package; see COPYING.  If not, write to
-// the Free Software Foundation, 675 Mass Ave, Cambridge, MA 02139, USA.
+// You should have received a copy of the GNU General Public License
+// along with this program.  If not, see <http://www.gnu.org/licenses/>.
 //
 
 
@@ -373,6 +372,7 @@ AtomMap::AtomMap () {
 #endif
 
   // finite nuclear exponents, from L. Visscher and K. G. Dyall, At. Data Nucl. Data Tables 67, 207 (1997)
+  nuclear_exponents.emplace("q",  0.0000000000E+00);
   nuclear_exponents.emplace("h",  2.1248239171E+09);
   nuclear_exponents.emplace("he", 1.1671538870E+09);
   nuclear_exponents.emplace("li", 8.9266848806E+08);
@@ -483,6 +483,106 @@ AtomMap::AtomMap () {
   nuclear_exponents.emplace("hn", 1.1905722195E+08);
   nuclear_exponents.emplace("mt", 1.1878724932E+08);
 
+  //Atomic masses taken from CRC Handbook of Chemistry and Physics
+  //average isotope mass
+  averaged_masses.emplace("q", 0.0);
+  averaged_masses.emplace("h", 1.00794);
+  averaged_masses.emplace("he", 4.00260);
+  averaged_masses.emplace("li", 6.941);
+  averaged_masses.emplace("be", 9.01218);
+  averaged_masses.emplace("b", 10.81);
+  averaged_masses.emplace("c", 12.011);
+  averaged_masses.emplace("n", 14.0067);
+  averaged_masses.emplace("o", 15.9994);
+  averaged_masses.emplace("f", 18.998403);
+  averaged_masses.emplace("ne", 20.179);
+  averaged_masses.emplace("na", 22.989877);
+  averaged_masses.emplace("mg", 24.305);
+  averaged_masses.emplace("al", 26.98154);
+  averaged_masses.emplace("si", 28.0955);
+  averaged_masses.emplace("p", 30.97376);
+  averaged_masses.emplace("s", 32.06);
+  averaged_masses.emplace("cl", 35.453);
+  averaged_masses.emplace("ar", 39.948);
+  averaged_masses.emplace("k", 39.0983);
+  averaged_masses.emplace("ca", 40.08);
+  averaged_masses.emplace("sc", 44.9559);
+  averaged_masses.emplace("ti", 47.88);
+  averaged_masses.emplace("v", 50.9415);
+  averaged_masses.emplace("cr", 51.996);
+  averaged_masses.emplace("mn", 54.9380);
+  averaged_masses.emplace("fe", 55.847);
+  averaged_masses.emplace("co", 58.9332);
+  averaged_masses.emplace("ni", 58.69);
+  averaged_masses.emplace("cu", 63.546);
+  averaged_masses.emplace("zn", 65.39);
+  averaged_masses.emplace("ga", 69.72);
+  averaged_masses.emplace("ge", 72.59);
+  averaged_masses.emplace("as", 74.9216);
+  averaged_masses.emplace("se", 78.96);
+  averaged_masses.emplace("br", 79.904);
+  averaged_masses.emplace("kr", 83.80);
+  averaged_masses.emplace("rb", 85.4678);
+  averaged_masses.emplace("sr", 87.62);
+  averaged_masses.emplace("y", 88.9059);
+  averaged_masses.emplace("zr", 91.22);
+  averaged_masses.emplace("nb", 92.9064);
+  averaged_masses.emplace("mo", 95.94);
+  averaged_masses.emplace("tc", 98.0);
+  averaged_masses.emplace("ru", 101.07);
+  averaged_masses.emplace("rh", 102.9055);
+  averaged_masses.emplace("pd", 106.42);
+  averaged_masses.emplace("ag", 107.8682);
+  averaged_masses.emplace("cd", 112.41);
+  averaged_masses.emplace("in", 114.82);
+  averaged_masses.emplace("sn", 118.69);
+  averaged_masses.emplace("sb", 121.75);
+  averaged_masses.emplace("te", 127.60);
+  averaged_masses.emplace("i", 126.9054);
+  averaged_masses.emplace("xe", 131.29);
+  averaged_masses.emplace("cs", 132.9054);
+  averaged_masses.emplace("ba", 137.33);
+  averaged_masses.emplace("la", 138.9055);
+  averaged_masses.emplace("ce", 140.12);
+  averaged_masses.emplace("pr", 140.9077);
+  averaged_masses.emplace("nd", 144.24);
+  averaged_masses.emplace("pm", 145.0);
+  averaged_masses.emplace("sm", 150.36);
+  averaged_masses.emplace("eu", 151.96);
+  averaged_masses.emplace("gd", 157.25);
+  averaged_masses.emplace("tb", 158.9254);
+  averaged_masses.emplace("dy", 162.5);
+  averaged_masses.emplace("ho", 164.9304);
+  averaged_masses.emplace("er", 167.26);
+  averaged_masses.emplace("tm", 168.9342);
+  averaged_masses.emplace("yb", 173.04);
+  averaged_masses.emplace("lu", 174.976);
+  averaged_masses.emplace("hf", 178.49);
+  averaged_masses.emplace("ta", 180.9479);
+  averaged_masses.emplace("w", 183.85);
+  averaged_masses.emplace("re", 186.207);
+  averaged_masses.emplace("os", 190.2);
+  averaged_masses.emplace("ir", 192.22);
+  averaged_masses.emplace("pt", 195.08);
+  averaged_masses.emplace("au", 196.9665);
+  averaged_masses.emplace("hg", 200.59);
+  averaged_masses.emplace("tl", 204.383);
+  averaged_masses.emplace("pb", 207.2);
+  averaged_masses.emplace("bi", 208.9804);
+  averaged_masses.emplace("po", 208.9825);
+  averaged_masses.emplace("at", 210.9875);
+  averaged_masses.emplace("rn", 222.0175);
+  averaged_masses.emplace("fr", 223.0198);
+  averaged_masses.emplace("ra", 226.0254);
+  averaged_masses.emplace("ac", 227.0278);
+  averaged_masses.emplace("th", 232.0381);
+  averaged_masses.emplace("pa", 231.0359);
+  averaged_masses.emplace("u", 238.0289);
+  averaged_masses.emplace("np", 237.0482);
+  averaged_masses.emplace("pu", 244.0);
+  averaged_masses.emplace("am", 243.0);
+  averaged_masses.emplace("cm", 247.0);
+
   angmap.emplace("s", 0);
   angmap.emplace("p", 1);
   angmap.emplace("d", 2);
@@ -490,8 +590,8 @@ AtomMap::AtomMap () {
   angmap.emplace("g", 4);
   angmap.emplace("h", 5);
   angmap.emplace("i", 6);
+  angmap.emplace("j", 7);
 // Since they are not implemented yet
-//angmap.emplace("j", 7);
 //angmap.emplace("k", 8);
 //angmap.emplace("l", 9);
 
@@ -733,12 +833,128 @@ AtomMap::AtomMap () {
   nopen.emplace("uus", make_tuple(0,5,0,0));
   nopen.emplace("uuo", make_tuple(0,0,0,0));
 
+  // P in the hyperfine coupling formula, copied from Takeshi's ORZ package
+  // which in turn originates from Orca's output according to Takeshi
+  // P = g_e * g_N * beta_e * beta_N :
+  //   g_e = 2.000... (g factor of free electron)
+  //   g_N = g factor of nucleus
+  //   beta_e = electron magneton = alpha(fine structure constant) / 2.0
+  //   beta_N = nuclear magneton
+  hfccp.emplace("h",   533.5514);
+  hfccp.emplace("he",    0.0000);
+  hfccp.emplace("li",  207.3726);
+  hfccp.emplace("be",    0.0000);
+  hfccp.emplace("b",   171.2143);
+  hfccp.emplace("c",   134.1900);
+  hfccp.emplace("n",    38.5677);
+  hfccp.emplace("o",   -72.3588);
+  hfccp.emplace("f",   502.2244);
+  hfccp.emplace("ne",    0.0000);
+  hfccp.emplace("na",  141.2175);
+  hfccp.emplace("mg",    0.0000);
+  hfccp.emplace("al",  139.1361);
+  hfccp.emplace("si",    0.0000);
+  hfccp.emplace("p",   216.1834);
+  hfccp.emplace("s",     0.0000);
+  hfccp.emplace("cl",    0.0000);
+  hfccp.emplace("ar",    0.0000);
+  hfccp.emplace("k",    24.9301);
+  hfccp.emplace("ca",    0.0000);
+  hfccp.emplace("sc",    0.0000);
+  hfccp.emplace("ti",  -30.1264);
+  hfccp.emplace("v",   140.2594);
+  hfccp.emplace("cr",  -30.0605);
+  hfccp.emplace("mn",  132.0006);
+  hfccp.emplace("fe",    0.0000);
+  hfccp.emplace("co",    0.0000);
+  hfccp.emplace("ni",    0.0000);
+  hfccp.emplace("cu",  141.7533);
+  hfccp.emplace("zn",   33.4622);
+  hfccp.emplace("ga",    0.0000);
+  hfccp.emplace("ge",    0.0000);
+  hfccp.emplace("as",    0.0000);
+  hfccp.emplace("se",    0.0000);
+  hfccp.emplace("br",    0.0000);
+  hfccp.emplace("kr",    0.0000);
+//hfccp.emplace("rb",    0.0000);
+//hfccp.emplace("sr",    0.0000);
+//hfccp.emplace("y",     0.0000);
+//hfccp.emplace("zr",    0.0000);
+//hfccp.emplace("nb",    0.0000);
+//hfccp.emplace("mo",    0.0000);
+//hfccp.emplace("tc",    0.0000);
+//hfccp.emplace("ru",    0.0000);
+  hfccp.emplace("rh",   -16.8881);
+  hfccp.emplace("pd",   -24.4534);
+  hfccp.emplace("ag",   -21.7071);
+  hfccp.emplace("cd",  -113.7112);
+//hfccp.emplace("in",    0.0000);
+//hfccp.emplace("sn",    0.0000);
+//hfccp.emplace("sb",    0.0000);
+//hfccp.emplace("te",    0.0000);
+//hfccp.emplace("i",     0.0000);
+//hfccp.emplace("xe",    0.0000);
+//hfccp.emplace("cs",    0.0000);
+//hfccp.emplace("ba",    0.0000);
+//hfccp.emplace("la",    0.0000);
+//hfccp.emplace("ce",    0.0000);
+//hfccp.emplace("pr",    0.0000);
+//hfccp.emplace("nd",    0.0000);
+//hfccp.emplace("pm",    0.0000);
+//hfccp.emplace("sm",    0.0000);
+//hfccp.emplace("eu",    0.0000);
+//hfccp.emplace("gd",    0.0000);
+//hfccp.emplace("tb",    0.0000);
+//hfccp.emplace("dy",    0.0000);
+//hfccp.emplace("ho",    0.0000);
+//hfccp.emplace("er",    0.0000);
+//hfccp.emplace("tm",    0.0000);
+//hfccp.emplace("yb",    0.0000);
+//hfccp.emplace("lu",    0.0000);
+//hfccp.emplace("hf",    0.0000);
+//hfccp.emplace("ta",    0.0000);
+//hfccp.emplace("w",     0.0000);
+//hfccp.emplace("re",    0.0000);
+//hfccp.emplace("os",    0.0000);
+//hfccp.emplace("ir",    0.0000);
+//hfccp.emplace("pt",    0.0000);
+  hfccp.emplace("au",    9.3580);
+//hfccp.emplace("hg",    0.0000);
+//hfccp.emplace("tl",    0.0000);
+//hfccp.emplace("pb",    0.0000);
+//hfccp.emplace("bi",    0.0000);
+//hfccp.emplace("po",    0.0000);
+//hfccp.emplace("at",    0.0000);
+//hfccp.emplace("rn",    0.0000);
+//hfccp.emplace("fr",    0.0000);
+//hfccp.emplace("ra",    0.0000);
+//hfccp.emplace("ac",    0.0000);
+//hfccp.emplace("th",    0.0000);
+//hfccp.emplace("pa",    0.0000);
+//hfccp.emplace("u",     0.0000);
+//hfccp.emplace("np",    0.0000);
+//hfccp.emplace("pu",    0.0000);
+//hfccp.emplace("am",    0.0000);
+//hfccp.emplace("cm",    0.0000);
+//hfccp.emplace("bk",    0.0000);
+//hfccp.emplace("cf",    0.0000);
+//hfccp.emplace("es",    0.0000);
+//hfccp.emplace("fm",    0.0000);
+//hfccp.emplace("md",    0.0000);
+//hfccp.emplace("no",    0.0000);
+//hfccp.emplace("lr",    0.0000);
+//hfccp.emplace("rf",    0.0000);
+
 }
 
 int AtomMap::angular_number(const string input) const {
   auto miter = angmap.find(input);
   stringstream ss; ss << "Unknown angular number in a basis set file. Requested: " << input << endl;
   if (miter == angmap.end()) throw runtime_error(ss.str());
+#ifndef COMPILE_J_ORB
+  if (input == "j")
+    throw runtime_error("j-orbitals requested in a basis set file.  BAGEL must be compiled with the -DCOMPILE_J_ORB flag to use this.");
+#endif
   return miter->second;
 }
 
@@ -763,6 +979,11 @@ double AtomMap::nuclear_exponent(const string input) const {
   return miter->second;
 }
 
+double AtomMap::averaged_mass(const string input) const {
+  auto miter = averaged_masses.find(input);
+  if (miter == averaged_masses.end()) throw runtime_error("Unknown atom (Averaged atomic mass).");
+  return miter->second;
+}
 
 tuple<int,int,int,int> AtomMap::num_closed(const string input) const {
   auto miter = nclosed.find(input);
@@ -774,6 +995,18 @@ tuple<int,int,int,int> AtomMap::num_closed(const string input) const {
 tuple<int,int,int,int> AtomMap::num_open(const string input) const {
   auto miter = nopen.find(input);
   if (miter == nopen.end()) throw runtime_error("Unknown atom (#open shell).");
+  return miter->second;
+}
+
+
+bool AtomMap::hfcc_exists(const string input) const {
+  return hfccp.find(input) != hfccp.end();
+}
+
+
+double AtomMap::hfcc_pfac(const string input) const {
+  auto miter = hfccp.find(input);
+  if (miter == hfccp.end()) throw runtime_error("Unknown atom (HPCC P factor).");
   return miter->second;
 }
 

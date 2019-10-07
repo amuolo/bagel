@@ -1,5 +1,5 @@
 //
-// BAGEL - Parallel electron correlation program.
+// BAGEL - Brilliantly Advanced General Electronic Structure Library
 // Filename: molecule.h
 // Copyright (C) 2013 Toru Shiozaki
 //
@@ -8,19 +8,18 @@
 //
 // This file is part of the BAGEL package.
 //
-// The BAGEL package is free software; you can redistribute it and/or modify
-// it under the terms of the GNU Library General Public License as published by
-// the Free Software Foundation; either version 3, or (at your option)
-// any later version.
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
 //
-// The BAGEL package is distributed in the hope that it will be useful,
+// This program is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-// GNU Library General Public License for more details.
+// GNU General Public License for more details.
 //
-// You should have received a copy of the GNU Library General Public License
-// along with the BAGEL package; see COPYING.  If not, write to
-// the Free Software Foundation, 675 Mass Ave, Cambridge, MA 02139, USA.
+// You should have received a copy of the GNU General Public License
+// along with this program.  If not, see <http://www.gnu.org/licenses/>.
 //
 
 #ifndef __SRC_MOLECULE_MOLECULE_H
@@ -28,9 +27,9 @@
 
 #include <iostream>
 #include <src/molecule/atom.h>
-#include <src/molecule/petite.h>
 #include <src/util/math/xyzfile.h>
 #include <src/util/serialization.h>
+#include <src/opt/constraint.h>
 
 namespace bagel {
 
@@ -62,14 +61,6 @@ class Molecule {
     // Nuclear repulsion energy.
     double nuclear_repulsion_;
 
-    // Symmetry can be used for molecular calculation.
-    std::string symmetry_;
-    std::shared_ptr<Petite> plist_;
-    int nirrep_;
-
-    // for R12 calculations
-    double gamma_;
-
     // external electric field
     std::array<double,3> external_;
 
@@ -77,10 +68,14 @@ class Molecule {
     std::array<double,3> magnetic_field_;
 
     // Computes the nuclear repulsion energy.
+    bool skip_self_interaction_;
     double compute_nuclear_repulsion();
 
     // Constructor helpers
     void common_init1();
+
+    // Absorbing potential
+    std::array<double,3> cap_;
 
   private:
     // serialization
@@ -89,13 +84,14 @@ class Molecule {
     template<class Archive>
     void serialize(Archive& ar, const unsigned int) {
       ar & spherical_ & aux_merged_ & nbasis_ & nele_ & nfrc_ & naux_ & lmax_ & aux_lmax_ & offsets_ & aux_offsets_ & basisfile_ & auxfile_
-         & atoms_ & aux_atoms_ & nuclear_repulsion_ & symmetry_ & plist_ & nirrep_ & gamma_ & external_ & magnetic_field_;
+         & atoms_ & aux_atoms_ & nuclear_repulsion_ & external_ & magnetic_field_ & skip_self_interaction_;
     }
 
   public:
-    Molecule() : symmetry_("c1"), nirrep_(1), external_{{0.0,0.0,0.0}}, magnetic_field_{{0.0,0.0,0.0}} {}
+    Molecule() : external_{{0.0,0.0,0.0}}, magnetic_field_{{0.0,0.0,0.0}} {}
     Molecule(const std::vector<std::shared_ptr<const Atom>> a, const std::vector<std::shared_ptr<const Atom>> b)
-      : atoms_(a), aux_atoms_(b), symmetry_("c1"), nirrep_(1), external_{{0.0,0.0,0.0}}, magnetic_field_{{0.0,0.0,0.0}} { }
+      : atoms_(a), aux_atoms_(b), external_{{0.0,0.0,0.0}}, magnetic_field_{{0.0,0.0,0.0}} { }
+    Molecule(const Molecule& o, std::shared_ptr<const Matrix> disp, const bool rotate = true);
     virtual ~Molecule() { }
 
     // Returns shared pointers of Atom objects, which contains basis-set info.
@@ -114,10 +110,8 @@ class Molecule {
     int natom() const { return atoms_.size(); }
     const std::string basisfile() const { return basisfile_; }
     const std::string auxfile() const { return auxfile_; }
-    const std::string symmetry() const { return symmetry_; }
     virtual double nuclear_repulsion() const { return nuclear_repulsion_; }
-    double gamma() const {return gamma_; }
-    int nirrep() const { return nirrep_; }
+    bool skip_self_interaction() { return skip_self_interaction_; }
 
     // The position of the specific function in the basis set.
     const std::vector<std::vector<int>>& offsets() const { return offsets_; }
@@ -126,7 +120,6 @@ class Molecule {
     const std::vector<int>& aux_offset(const unsigned int i) const { return aux_offsets_.at(i); }
 
     int num_count_ncore_only() const; // also set nfrc_
-    int num_count_full_valence_nocc() const;
 
     void print_atoms() const;
 
@@ -134,9 +127,6 @@ class Molecule {
 
     std::array<double,3> charge_center() const;
     std::array<double,6> quadrupole() const;
-
-    // Returns the Petite list.
-    std::shared_ptr<Petite> plist() const { return plist_; }
 
     // finite nucleus
     bool has_finite_nucleus() const;
@@ -152,6 +142,8 @@ class Molecule {
 
     std::shared_ptr<const XYZFile> xyz() const;
 
+    std::array<double,3> cap() const { return cap_; }
+
     // In R12 methods, we need to construct a union of OBS and CABS.
     // Currently, this is done by creating another object and merge OBS and CABS into atoms_.
     // After this, compute_nuclear_repulsion() should not be called.
@@ -159,8 +151,20 @@ class Molecule {
     void merge_obs_aux();
 
     // transformation matrices for the internal coordinate for geometry optimization
-    // ninternal runs fast (and cartsize slower)
-    std::array<std::shared_ptr<const Matrix>,2> compute_internal_coordinate(std::shared_ptr<const Matrix> prev = nullptr) const;
+    // ninternal runs fast (and cartsize slower) (weighted Wilson B)
+    std::array<std::shared_ptr<const Matrix>,3> compute_internal_coordinate(
+        std::shared_ptr<const Matrix> prev = nullptr,
+        std::vector<std::shared_ptr<const OptExpBonds>> explicit_bond = std::vector<std::shared_ptr<const OptExpBonds>>(),
+        bool negative_hessian = false,
+        bool verbose = true) const;
+    // driver for compute B matrix for redundant coordinate (original Wilson B)
+    std::tuple<std::vector<std::vector<int>>,std::array<std::shared_ptr<const Matrix>,5>> compute_redundant_coordinate(std::vector<std::vector<int>> prev) const;
+
+    // Split up the atoms into several Molecule objects
+    // To limit the memory requirement of integral evaluation
+    const std::vector<std::shared_ptr<const Molecule>> split_atoms(const int max_atoms) const;
+
+    std::shared_ptr<Molecule> uncontract() const;
 
 };
 

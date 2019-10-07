@@ -1,5 +1,5 @@
 //
-// BAGEL - Parallel electron correlation program.
+// BAGEL - Brilliantly Advanced General Electronic Structure Library
 // Filename: casscf.cc
 // Copyright (C) 2011 Toru Shiozaki
 //
@@ -8,19 +8,18 @@
 //
 // This file is part of the BAGEL package.
 //
-// The BAGEL package is free software; you can redistribute it and/or modify
-// it under the terms of the GNU Library General Public License as published by
-// the Free Software Foundation; either version 3, or (at your option)
-// any later version.
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
 //
-// The BAGEL package is distributed in the hope that it will be useful,
+// This program is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-// GNU Library General Public License for more details.
+// GNU General Public License for more details.
 //
-// You should have received a copy of the GNU Library General Public License
-// along with the BAGEL package; see COPYING.  If not, write to
-// the Free Software Foundation, 675 Mass Ave, Cambridge, MA 02139, USA.
+// You should have received a copy of the GNU General Public License
+// along with this program.  If not, see <http://www.gnu.org/licenses/>.
 //
 
 
@@ -33,8 +32,19 @@ using namespace std;
 using namespace bagel;
 
 
-CASSCF::CASSCF(std::shared_ptr<const PTree> idat, const shared_ptr<const Geometry> geom, const shared_ptr<const Reference> re)
-  : Method(idat, geom, re), hcore_(make_shared<Hcore>(geom)) {
+CASSCF::CASSCF(shared_ptr<const PTree> idat, const shared_ptr<const Geometry> geom, const shared_ptr<const Reference> re)
+  : Method(idat, geom, re), hcore_(make_shared<Hcore>(geom, geom->hcoreinfo())) {
+
+  // check if RDMs are supplied externally
+  external_rdm_ = idata_->get<string>("external_rdm", "");
+  if (!external_rdm_.empty() && external_rdm_ != "noref") {
+    IArchive ar("ref");
+    ar >> ref_;
+  }
+
+  // drop the reference if restart is requested
+  if (idata_->get<bool>("restart", false))
+    ref_ = nullptr;
 
   if (!ref_) {
     auto scf = make_shared<RHF>(idat, geom);
@@ -48,8 +58,6 @@ CASSCF::CASSCF(std::shared_ptr<const PTree> idat, const shared_ptr<const Geometr
 
 
 void CASSCF::common_init() {
-  // at the moment I only care about C1 symmetry, with dynamics in mind
-  if (geom_->nirrep() > 1) throw runtime_error("CASSCF: C1 only at the moment.");
   print_header();
 
   const shared_ptr<const PTree> iactive = idata_->get_child_optional("active");
@@ -64,11 +72,13 @@ void CASSCF::common_init() {
     cout << "    ============================ " << endl << endl;
   }
 
+  thresh_overlap_ = idata_->get<double>("thresh_overlap", 1.0e-8);
+
   // first set coefficient
   coeff_ = ref_->coeff();
   if (geom_->nbasis() != coeff_->mdim()) {
     Overlap ovl(geom_);
-    shared_ptr<const Matrix> tildex = ovl.tildex();
+    shared_ptr<const Matrix> tildex = ovl.tildex(thresh_overlap_);
 
     Matrix c(coeff_->ndim(), tildex->mdim());
     c.copy_block(0, 0, coeff_->ndim(), coeff_->mdim(), coeff_);
@@ -89,16 +99,29 @@ void CASSCF::common_init() {
   max_micro_iter_ = idata_->get<int>("maxiter_micro", 100);
   // get nstate from the input
   nstate_ = idata_->get<int>("nstate", 1);
+  energy_.resize(nstate_);
   // get thresh (for macro iteration) from the input
   thresh_ = idata_->get<double>("thresh", 1.0e-8);
   // get thresh (for micro iteration) from the input
   thresh_micro_ = idata_->get<double>("thresh_micro", 5.0e-6);
-  // option for printing natural orbitals
-  natocc_ = idata_->get<bool>("natocc",false);
 
-  // nocc from the input. If not present, full valence active space is generated.
+  // whether or not to throw if the calculation does not converge
+  conv_ignore_ = idata_->get<bool>("conv_ignore", false);
+
+  // to save binary archives with each iteration
+  restart_cas_ = idata_->get<bool>("restart_cas", false);
+
+  // option for printing natural orbitals
+  natocc_ = idata_->get<bool>("natocc", false);
+
+  // option for saving canonical orbitals
+  canonical_ = idata_->get<bool>("canonical", false);
+
+  // nact from the input.
   nact_ = idata_->get<int>("nact", 0);
-  nact_ = idata_->get<int>("nact_cas", nact_);
+  // FCI algorithm
+  auto fci_algo = idata_->get<string>("fci_algorithm", ((nact_ > 9) && (mpi__->size() >= 8)) ? "parallel" : "knowles");
+  fci_algorithm_ = make_shared<FCI_algorithms>(fci_algo);
 
   // nclosed from the input. If not present, full core space is generated.
   nclosed_ = idata_->get<int>("nclosed", -1);
@@ -110,8 +133,8 @@ void CASSCF::common_init() {
   }
   nocc_ = nclosed_ + nact_;
 
-  nbasis_ = coeff_->mdim();
-  nvirt_ = nbasis_ - nocc_;
+  nmo_ = coeff_->mdim();
+  nvirt_ = nmo_ - nocc_;
   if (nvirt_ < 0) throw runtime_error("It appears that nvirt < 0. Check the nocc value");
 
   cout << "    * nstate   : " << setw(6) << nstate_ << endl;
@@ -119,22 +142,32 @@ void CASSCF::common_init() {
   cout << "    * nact     : " << setw(6) << nact_ << endl;
   cout << "    * nvirt    : " << setw(6) << nvirt_ << endl;
 
-  const int idel = geom_->nbasis() - nbasis_;
+  const int idel = geom_->nbasis() - nmo_;
   if (idel)
     cout << "      Due to linear dependency, " << idel << (idel==1 ? " function is" : " functions are") << " omitted" << endl;
 
 
   // CASSCF methods should have FCI member. Inserting "ncore" and "norb" keyword for closed and total orbitals.
-  mute_stdcout();
+  muffle_ = make_shared<Muffle>("casscf.log");
   if (nact_) {
     auto idata = make_shared<PTree>(*idata_);
     idata->erase("active");
-    fci_ = make_shared<KnowlesHandy>(idata, geom_, ref_, nclosed_, nact_); // nstate does not need to be specified as it is in idata_...
+    if (fci_algorithm_->is_knowles()) {
+      cout << "    * Using serial Knowles-Handy algorithm in FCI." << endl;
+      fci_ = make_shared<KnowlesHandy>(idata, geom_, ref_, nclosed_, nact_, /*nstates to be read from idata*/-1, /*store*/true);
+    } else if (fci_algorithm_->is_harrison()) {
+      cout << "    * Using serial Harrison-Zarrabian algorithm in FCI." << endl;
+      fci_ = make_shared<HarrisonZarrabian>(idata, geom_, ref_, nclosed_, nact_, /*nstates to be read from idata*/-1, /*store*/true);
+#ifdef HAVE_MPI_H
+    } else if (fci_algorithm_->is_dist()) {
+      cout << "    * Using parallel algorithm in FCI." << endl;
+      fci_ = make_shared<DistFCI>(idata, geom_, ref_, nclosed_, nact_, /*nstates to be read from idata*/-1, /*store*/true);
+#endif
+    }
   }
-  resume_stdcout();
+  muffle_->unmute();
 
-
-  schwarz_ = geom_->schwarz();
+  do_hyperfine_ = idata_->get<bool>("hyperfine", false);
 
   cout <<  "  === CASSCF iteration (" + geom_->basisfile() + ") ===" << endl << endl;
 
@@ -152,32 +185,17 @@ void CASSCF::print_header() const {
   cout << "  ---------------------------" << endl << endl;
 }
 
-void CASSCF::print_iteration(int iter, int miter, int tcount, const vector<double> energy, const double error, const double time) const {
+void CASSCF::print_iteration(const int iter, const vector<double>& energy, const double error, const double time) const {
+  muffle_->unmute();
   if (energy.size() != 1 && iter) cout << endl;
 
   int i = 0;
   for (auto& e : energy) {
-    cout << "  " << setw(5) << iter << setw(3) << i << setw(4) << miter << setw(4) << tcount
-                 << setw(16) << fixed << setprecision(8) << e << "   "
-                 << setw(10) << scientific << setprecision(2) << (i==0 ? error : 0.0) << fixed << setw(10) << setprecision(2)
-                 << time << endl;
+    cout << "  " << setw(5) << iter << setw(3) << i << setw(19) << fixed << setprecision(8) << e << "   "
+                 << setw(10) << scientific << setprecision(2) << (i==0 ? error : 0.0) << fixed << setw(10) << setprecision(2) << time << endl;
     ++i;
   }
-}
-
-static streambuf* backup_stream_;
-static ofstream* ofs_;
-
-void CASSCF::mute_stdcout() {
-  ofstream* ofs(new ofstream("casscf.log",(backup_stream_ ? ios::app : ios::trunc)));
-  ofs_ = ofs;
-  backup_stream_ = cout.rdbuf(ofs->rdbuf());
-}
-
-
-void CASSCF::resume_stdcout() {
-  cout.rdbuf(backup_stream_);
-  delete ofs_;
+  muffle_->mute();
 }
 
 
@@ -198,186 +216,98 @@ shared_ptr<Matrix> CASSCF::ao_rdm1(shared_ptr<const RDM<1>> rdm1, const bool ina
 }
 
 
+std::shared_ptr<Matrix> CASSCF::compute_active_fock(const MatView acoeff, shared_ptr<const RDM<1>> rdm1) const {
+  Matrix dkl(nact_, nact_);
+  copy_n(rdm1->data(), nact_*nact_, dkl.data());
+  dkl.sqrt();
+  dkl.scale(1.0/sqrt(2.0));
+  return make_shared<Fock<1>>(geom_, hcore_->clone(), nullptr, acoeff * dkl, /*store*/false, /*rhf*/true);
+}
 
-void CASSCF::one_body_operators(shared_ptr<Matrix>& f, shared_ptr<Matrix>& fact, shared_ptr<Matrix>& factp, shared_ptr<Matrix>& gaa,
-                                shared_ptr<RotFile>& d, const bool superci) const {
 
-  shared_ptr<Matrix> finact;
-
-  // get quantity Q_xr = 2(xs|tu)P_rs,tu (x=general)
-  // note: this should be after natorb transformation.
-  auto qxr = make_shared<Qvec>(coeff_->mdim(), nact_, coeff_, nclosed_, fci_, fci_->rdm2_av());
-
-  {
-    // Fock operators
-    // make a matrix that contains rdm1_av
-    auto rdm1mat = make_shared<Matrix>(nact_, nact_);
+tuple<shared_ptr<const Coeff>,VectorB,VectorB> CASSCF::semi_canonical_orb() const {
+  auto rdm1mat = make_shared<Matrix>(nact_, nact_);
+  shared_ptr<const Matrix> rdm1copy; 
+  if (nact_) {
     copy_n(fci_->rdm1_av()->data(), rdm1mat->size(), rdm1mat->data());
+    rdm1copy = rdm1mat->copy();
     rdm1mat->sqrt();
     rdm1mat->scale(1.0/sqrt(2.0));
-    auto acoeff = coeff_->slice(nclosed_, nclosed_+nact_);
-
-    finact = make_shared<Matrix>(*coeff_ % *fci_->jop()->core_fock() * *coeff_);
-    auto fact_ao = make_shared<Fock<1>>(geom_, hcore_->clone(), nullptr, acoeff * *rdm1mat, false, /*rhf*/true);
-    f = make_shared<Matrix>(*finact + *coeff_% *fact_ao * *coeff_);
   }
-  {
-    // active-x Fock operator Dts finact_sx + Qtx
-    fact = qxr->copy();// nbasis_ runs first
-    for (int i = 0; i != nact_; ++i)
-      daxpy_(nbasis_, occup_(i), finact->element_ptr(0,nclosed_+i), 1, fact->data()+i*nbasis_, 1);
-  }
-
-  {
-    // active Fock' operator (Fts+Fst) / (ns+nt)
-    factp = make_shared<Matrix>(nact_, nact_);
-    for (int i = 0; i != nact_; ++i)
-      for (int j = 0; j != nact_; ++j) {
-#if 1
-        if (occup_(i)+occup_(j) > occup_thresh)
-          factp->element(j,i) = (fact->element(j+nclosed_,i)+fact->element(i+nclosed_,j)) / (occup_(i)+occup_(j));
-        else
-          factp->element(j,i) = 0.0;
-#else
-        factp->element(j,i) = (fact->element(j+nclosed_,i)+fact->element(i+nclosed_,j)) *0.5;
-#endif
-      }
-  }
-
-  // G matrix (active-active) Drs,tu Factp_tu - delta_rs nr sum_v Factp_vv
-  gaa = factp->clone();
-  dgemv_("N", nact_*nact_, nact_*nact_, 1.0, fci_->rdm2_av()->data(), nact_*nact_, factp->data(), 1, 0.0, gaa->data(), 1);
-  double p = 0.0;
-  for (int i = 0; i != nact_; ++i) p += occup_(i) * factp->element(i,i);
-  for (int i = 0; i != nact_; ++i) gaa->element(i,i) -= occup_(i) * p;
-
-  // denominator
-  auto denom = make_shared<RotFile>(nclosed_, nact_, nvirt_);
-  fill_n(denom->data(), denom->size(), 1.0e100);
-
-  double* target = denom->ptr_va();
-  for (int i = 0; i != nact_; ++i) {
-    if (occup_(i) > occup_thresh) {
-      for (int j = 0; j != nvirt_; ++j, ++target)
-        *target = (gaa->element(i,i) + occup_(i)*f->element(j+nocc_, j+nocc_)) / (superci ? occup_(i) : 1.0);
-    } else {
-      for (int j = 0; j != nvirt_; ++j, ++target)
-        *target = 1.0/occup_thresh;
-    }
-  }
-
-  target = denom->ptr_vc();
-  for (int i = 0; i != nclosed_; ++i)
-    for (int j = 0; j != nvirt_; ++j, ++target)
-      *target = (f->element(j+nocc_, j+nocc_) - f->element(i, i)) / (superci ? 2.0 : 1.0);
-
-  target = denom->ptr_ca();
-  for (int i = 0; i != nact_; ++i) {
-    if (2.0-occup_(i) > occup_thresh) {
-      for (int j = 0; j != nclosed_; ++j, ++target)
-        *target = ((f->element(nclosed_+i,nclosed_+i)*2.0-fact->element(i+nclosed_,i)) - f->element(j, j)*(2.0-occup_(i))) / (superci ? 2.0-occup_(i) : 1.0);
-    } else {
-      for (int j = 0; j != nclosed_; ++j, ++target)
-        *target = 1.0/occup_thresh;
-    }
-  }
-  d = denom;
-}
-
-
-shared_ptr<const Coeff> CASSCF::update_coeff(const shared_ptr<const Matrix> cold, shared_ptr<const Matrix> mat) const {
-  auto cnew = make_shared<Coeff>(*cold);
-  int nbas = cold->ndim();
-  assert(nbas == geom_->nbasis());
-  dgemm_("N", "N", nbas, nact_, nact_, 1.0, cold->data()+nbas*nclosed_, nbas, mat->data(), nact_,
-                   0.0, cnew->data()+nbas*nclosed_, nbas);
-  return cnew;
-}
-
-
-
-shared_ptr<Matrix> CASSCF::form_natural_orbs() {
-  // here make a natural orbitals and update the coefficients
-  // this effectively updates 1,2RDM and integrals
-  const pair<shared_ptr<Matrix>, VectorB> natorb = fci_->natorb_convert();
-  // new coefficients
-  coeff_ = update_coeff(coeff_, natorb.first);
-  // occupation number of the natural orbitals
-  occup_ = natorb.second;
-  if (natocc_) print_natocc();
-  return natorb.first;
-}
-
-
-shared_ptr<const Coeff> CASSCF::semi_canonical_orb() const {
-  auto rdm1mat = make_shared<Matrix>(nact_, nact_);
-  copy_n(fci_->rdm1_av()->data(), rdm1mat->size(), rdm1mat->data());
-  rdm1mat->sqrt();
-  rdm1mat->scale(1.0/sqrt(2.0));
   auto ocoeff = coeff_->slice(0, nclosed_);
   auto acoeff = coeff_->slice(nclosed_, nocc_);
-  auto vcoeff = coeff_->slice(nocc_, nbasis_);
+  auto vcoeff = coeff_->slice(nocc_, nmo_);
+
+  Fock<1> fock;
+  if (nact_)
+    fock = Fock<1>(geom_, fci_->jop()->core_fock(), nullptr, acoeff * *rdm1mat, false, /*rhf*/true);
+  else
+    fock = Fock<1>(geom_, ref_->hcore(), nullptr, coeff_->slice_copy(0, nclosed_), false, /*rhf*/true);
 
   VectorB eig(coeff_->mdim());
-  Fock<1> fock(geom_, fci_->jop()->core_fock(), nullptr, acoeff * *rdm1mat, false, /*rhf*/true);
-  Matrix trans(nbasis_, nbasis_);
+  VectorB occup(coeff_->mdim());
+  // calculate the transformation matrix to (semi-)canonical orbitals
+  Matrix trans(nmo_, nmo_);
   trans.unit();
   if (nclosed_) {
     Matrix ofock = ocoeff % fock * ocoeff;
-    ofock.diagonalize(eig);
+    VectorB tmp(nclosed_);
+    ofock.diagonalize(tmp);
     trans.copy_block(0, 0, nclosed_, nclosed_, ofock);
+    copy_n(tmp.data(), nclosed_, eig.data());
+    fill_n(occup.data(), nclosed_, 2.0);
   }
-  Matrix vfock = vcoeff % fock * vcoeff;
-  vfock.diagonalize(eig);
-  trans.copy_block(nocc_, nocc_, nvirt_, nvirt_, vfock);
-  return make_shared<Coeff>(*coeff_ * trans);
+  if (nact_ && canonical_) {
+    Matrix afock = acoeff % fock * acoeff;
+    VectorB tmp(nact_);
+    afock.diagonalize(tmp);
+    trans.copy_block(nclosed_, nclosed_, nact_, nact_, afock);
+    copy_n(tmp.data(), nact_, eig.data()+nclosed_); 
+  }
+  {
+    Matrix vfock = vcoeff % fock * vcoeff;
+    VectorB tmp(nvirt_);
+    vfock.diagonalize(tmp);
+    trans.copy_block(nocc_, nocc_, nvirt_, nvirt_, vfock);
+    copy_n(tmp.data(), nvirt_, eig.data()+nclosed_+nact_);
+  }
+  // finally calculate the occupation numbers for active orbitals (diagonal elements of transformed 1RDM)  
+  {
+    shared_ptr<const Matrix> atrans = trans.get_submatrix(nclosed_, nclosed_, nact_, nact_);
+    const Matrix transrdm = *atrans * *rdm1copy ^ *atrans; 
+    for (int i = 0; i != nact_; ++i)
+      occup[i+nclosed_] = transrdm(i, i);
+  }
+
+  auto coeffout = make_shared<Coeff>(*coeff_ * trans);
+  return make_tuple(coeffout, move(eig), move(occup));
+}
+
+
+shared_ptr<const Matrix> CASSCF::spin_density() const {
+  Matrix den(nact_, nact_);
+  shared_ptr<const RDM<1>> rdm1 = fci_->rdm1(0);
+  copy_n(rdm1->data(), nact_*nact_, den.data());
+  den.scale((4.0 - fci_->det()->nelea() - fci_->det()->neleb()) * 0.5);
+
+  shared_ptr<RDM<2>> rdm2 = fci_->rdm2(0);
+  for (int i = 0; i != nact_; ++i)
+    for (int j = 0; j != nact_; ++j)
+      for (int k = 0; k != nact_; ++k)
+        den(j,i) -= rdm2->element(j,k,k,i);
+
+  den.scale(1.0 / (fci_->det()->nspin()*0.5 + 1.0));
+  auto acoeff = coeff_->slice(nclosed_, nclosed_+nact_);
+  return make_shared<Matrix>(acoeff * den ^ acoeff);
 }
 
 
 shared_ptr<const Reference> CASSCF::conv_to_ref() const {
-  shared_ptr<Reference> out;
-  if (nact_) {
-    out = make_shared<Reference>(geom_, coeff_, nclosed_, nact_, nvirt_, energy_av(),
-                                 fci_->rdm1(), fci_->rdm2(), fci_->rdm1_av(), fci_->rdm2_av(), fci_->conv_to_ciwfn());
-    // TODO
-    // compute one-body operators
-    shared_ptr<Matrix> f;
-    shared_ptr<Matrix> fact, factp, gaa;
-    shared_ptr<RotFile>  denom;
-    one_body_operators(f, fact, factp, gaa, denom);
-    if (natocc_) print_natocc();
-
-    *f *= 2.0;
-
-    for (int i = 0; i != nbasis_; ++i) {
-      for (int j = 0; j != nbasis_; ++j) {
-        if (i < nocc_ && j < nocc_) continue;
-        f->element(j,i) = 0.0;
-      }
-    }
-    for (int j = 0; j != nact_; ++j) {
-      for (int i = 0; i != nocc_; ++i) {
-        f->element(i,j+nclosed_) = fact->element(i,j);
-      }
-    }
-
-    auto erdm = make_shared<Matrix>(*coeff_ * *f ^ *coeff_);
-
-    out->set_erdm1(erdm);
-    out->set_nstate(nstate_);
-  } else {
-    out = make_shared<Reference>(geom_, coeff_, nclosed_, nact_, nvirt_, energy_av());
-  }
-  return out;
-}
-
-
-void CASSCF::print_natocc() const {
-  assert(occup_.size() > 0);
-  cout << " " << endl;
-  cout << "  ========       state-averaged       ======== " << endl;
-  cout << "  ======== natural occupation numbers ======== " << endl;
-  for (int i=0; i!=occup_.size(); ++i)
-    cout << setprecision(4) << "   Orbital " << i << " : " << occup_[i] << endl;
-  cout << "  ============================================ " << endl;
+  const bool noci = !nact_ || external_rdm_ == "noref";
+  auto ref = noci ? make_shared<Reference>(geom_, coeff_, nclosed_, nact_, nvirt_, energy_)
+                  : make_shared<Reference>(geom_, coeff_, nclosed_, nact_, nvirt_, energy_,
+                                           fci_->rdm1(), fci_->rdm2(), fci_->rdm1_av(), fci_->rdm2_av(), fci_->conv_to_ciwfn());
+  ref->set_eig(eig_);
+  ref->set_occup(occup_);
+  return ref;
 }

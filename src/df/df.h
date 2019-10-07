@@ -1,5 +1,5 @@
 //
-// BAGEL - Parallel electron correlation program.
+// BAGEL - Brilliantly Advanced General Electronic Structure Library
 // Filename: df.h
 // Copyright (C) 2012 Toru Shiozaki
 //
@@ -8,19 +8,18 @@
 //
 // This file is part of the BAGEL package.
 //
-// The BAGEL package is free software; you can redistribute it and/or modify
-// it under the terms of the GNU Library General Public License as published by
-// the Free Software Foundation; either version 3, or (at your option)
-// any later version.
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
 //
-// The BAGEL package is distributed in the hope that it will be useful,
+// This program is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-// GNU Library General Public License for more details.
+// GNU General Public License for more details.
 //
-// You should have received a copy of the GNU Library General Public License
-// along with the BAGEL package; see COPYING.  If not, write to
-// the Free Software Foundation, 675 Mass Ave, Cambridge, MA 02139, USA.
+// You should have received a copy of the GNU General Public License
+// along with this program.  If not, see <http://www.gnu.org/licenses/>.
 //
 
 #ifndef __SRC_DF_DF_H
@@ -36,6 +35,7 @@ class DFFullDist;
 
 class DFDist : public ParallelDF {
   friend class DFIntTask_OLD<DFDist>;
+  friend class PDFIntTask_2index;
   protected:
     std::pair<const double*, std::shared_ptr<RysInt>> compute_batch(std::array<std::shared_ptr<const Shell>,4>& input);
 
@@ -46,8 +46,8 @@ class DFDist : public ParallelDF {
     std::tuple<int, std::vector<std::shared_ptr<const Shell>>> get_ashell(const std::vector<std::shared_ptr<const Shell>>& all);
 
   public:
-    DFDist(const int nbas, const int naux, const std::shared_ptr<DFBlock> block = nullptr, std::shared_ptr<const ParallelDF> df = nullptr, std::shared_ptr<Matrix> data2 = nullptr)
-      : ParallelDF(naux, nbas, nbas, df, data2) {
+    DFDist(const int nbas, const int naux, const std::shared_ptr<DFBlock> block = nullptr, std::shared_ptr<const ParallelDF> df = nullptr, std::shared_ptr<Matrix> data2 = nullptr,
+           const bool serial = false) : ParallelDF(naux, nbas, nbas, df, data2, serial) {
       if (block)
         block_.push_back(block);
     }
@@ -58,10 +58,6 @@ class DFDist : public ParallelDF {
     size_t nbasis0() const { return nindex2_; }
     size_t nbasis1() const { return nindex1_; }
     size_t naux() const { return naux_; }
-
-    void add_direct_product(std::shared_ptr<const VectorB> a, std::shared_ptr<const Matrix> b, const double fac)
-       { add_direct_product(std::vector<std::shared_ptr<const VectorB>>{a}, std::vector<std::shared_ptr<const Matrix>>{b}, fac); }
-    void add_direct_product(std::vector<std::shared_ptr<const VectorB>> a, std::vector<std::shared_ptr<const Matrix>> b, const double fac);
 
     // compute half transforms; c is dimensioned by nbasis_;
     std::shared_ptr<DFHalfDist> compute_half_transform(const MatView c) const;
@@ -110,7 +106,6 @@ class DFDist_ints : public DFDist {
       for (auto& i2 : b2shell) {
         int j1 = 0;
         for (auto& i1 : b1shell) {
-          // TODO careful
           if (TBatch::Nblocks() > 1 || j1 <= j2) {
             int j0 = 0;
             for (auto& i0 : ashell) {
@@ -130,7 +125,8 @@ class DFDist_ints : public DFDist {
 
   public:
     DFDist_ints(const int nbas, const int naux, const std::vector<std::shared_ptr<const Atom>>& atoms, const std::vector<std::shared_ptr<const Atom>>& aux_atoms,
-                const double thr, const bool inverse, const double dum, const bool average = false, const std::shared_ptr<Matrix> data2 = nullptr) : DFDist(nbas, naux) {
+                const double thr, const bool inverse, const double dum, const bool average = false, const std::shared_ptr<Matrix> data2 = nullptr, const bool serial = false)
+      : DFDist(nbas, naux, nullptr, nullptr, nullptr, serial) {
 
       // 3index Integral is now made in DFBlock.
       std::vector<std::shared_ptr<const Shell>> ashell, b1shell, b2shell;
@@ -190,7 +186,10 @@ class DFHalfDist : public ParallelDF {
     std::shared_ptr<DFHalfDist> copy() const;
     std::shared_ptr<DFHalfDist> clone() const;
 
-    void rotate_occ(const std::shared_ptr<const Matrix> d);
+    std::shared_ptr<DFHalfDist> merge_b1(std::shared_ptr<DFHalfDist> o) const;
+    std::shared_ptr<DFHalfDist> slice_b1(const int slice_start, const int slice_size) const;
+
+    std::shared_ptr<DFHalfDist> transform_occ(const std::shared_ptr<const Matrix> d) const;
     std::shared_ptr<DFHalfDist> apply_density(const std::shared_ptr<const Matrix> d) const;
 
     std::shared_ptr<Matrix> compute_Kop_1occ(const std::shared_ptr<const Matrix> den, const double a) const;
@@ -221,7 +220,7 @@ class DFFullDist : public ParallelDF {
     template<typename T, class = typename std::enable_if<btas::is_boxtensor<T>::value>::type>
     std::shared_ptr<DFHalfDist> back_transform(std::shared_ptr<T> c) const { return back_transform(*c); }
 
-    void rotate_occ1(const std::shared_ptr<const Matrix> d);
+    std::shared_ptr<DFFullDist> transform_occ1(const std::shared_ptr<const Matrix> d) const;
 
     // 2RDM contractions
     // special function for RHF
@@ -232,8 +231,15 @@ class DFFullDist : public ParallelDF {
     std::shared_ptr<DFFullDist> apply_2rdm(const btas::Tensor4<double>& rdm, const btas::Tensor2<double>& rdm1, const int nclosed, const int nact) const;
     // general case without closed orbitals
     std::shared_ptr<DFFullDist> apply_2rdm(const btas::Tensor4<double>& rdm) const;
+    // general case with closed orbitals, transition case
+    std::shared_ptr<DFFullDist> apply_2rdm_tran(const btas::Tensor4<double>& rdm, const btas::Tensor2<double>& rdm1, const int nclosed, const int nact) const;
 
+    // returns the 4-index integrals with fixed index n
     std::shared_ptr<Matrix> form_4index_1fixed(const std::shared_ptr<const DFFullDist> o, const double a, const size_t n) const;
+    // returns the diagonal part of the 4-index integrals [o1v0] = (o1v0|g)(g|o1v0)
+    std::shared_ptr<Matrix> form_4index_diagonal() const;
+    // returns the diagonal part of the 4-index integrals [o1o2v0] = (o1v0|g)(g|o2v0)
+    std::shared_ptr<Matrix> form_4index_diagonal_part() const;
 
     // utility functions
     std::shared_ptr<Matrix> form_aux_2index_apply_J(const std::shared_ptr<const DFFullDist> o, const double a) const;

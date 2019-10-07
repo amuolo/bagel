@@ -1,5 +1,5 @@
 //
-// BAGEL - Parallel electron correlation program.
+// BAGEL - Brilliantly Advanced General Electronic Structure Library
 // Filename: asd_dmrg/block_operators.h
 // Copyright (C) 2014 Toru Shiozaki
 //
@@ -8,19 +8,18 @@
 //
 // This file is part of the BAGEL package.
 //
-// The BAGEL package is free software; you can redistribute it and/or modify
-// it under the terms of the GNU Library General Public License as published by
-// the Free Software Foundation; either version 3, or (at your option)
-// any later version.
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
 //
-// The BAGEL package is distributed in the hope that it will be useful,
+// This program is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-// GNU Library General Public License for more details.
+// GNU General Public License for more details.
 //
-// You should have received a copy of the GNU Library General Public License
-// along with the BAGEL package; see COPYING.  If not, write to
-// the Free Software Foundation, 675 Mass Ave, Cambridge, MA 02139, USA.
+// You should have received a copy of the GNU General Public License
+// along with this program.  If not, see <http://www.gnu.org/licenses/>.
 //
 
 #ifndef __BAGEL_ASD_DMRG_BLOCK_OPERATORS_H
@@ -112,14 +111,6 @@ class BlockOperators1 : public BlockOperators {
     std::shared_ptr<BlockSparseMatrix> gamma_a(const BlockKey bk, int i) const override;
     std::shared_ptr<BlockSparseMatrix> gamma_b(const BlockKey bk, int i) const override;
 
-    std::shared_ptr<Matrix>    Q_aa_as_matrix(const BlockKey bk, int i, int j) const { return get_mat_block(Q_aa_.at(bk), i, j); }
-    std::shared_ptr<Matrix>    Q_bb_as_matrix(const BlockKey bk, int i, int j) const { return get_mat_block(Q_bb_.at(bk), i, j); }
-    std::shared_ptr<Matrix>    Q_ab_as_matrix(const BlockKey bk, int i, int j) const { return get_mat_block(Q_ab_.at(bk), i, j); }
-    std::shared_ptr<Matrix>     S_a_as_matrix(const BlockKey bk, int i) const { return get_mat_block(S_a_.at(bk), i); }
-    std::shared_ptr<Matrix>     S_b_as_matrix(const BlockKey bk, int i) const { return get_mat_block(S_b_.at(bk), i); }
-    std::shared_ptr<Matrix>    P_aa_as_matrix(const BlockKey bk, int i, int j) const { return get_mat_block(P_aa_.at(bk), i, j); }
-    std::shared_ptr<Matrix>    P_bb_as_matrix(const BlockKey bk, int i, int j) const { return get_mat_block(P_bb_.at(bk), i, j); }
-    std::shared_ptr<Matrix>    P_ab_as_matrix(const BlockKey bk, int i, int j) const { return get_mat_block(P_ab_.at(bk), i, j); }
     std::shared_ptr<Matrix> gamma_a_as_matrix(const BlockKey bk, int i) const;
     std::shared_ptr<Matrix> gamma_b_as_matrix(const BlockKey bk, int i) const;
 

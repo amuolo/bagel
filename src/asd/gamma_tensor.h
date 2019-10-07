@@ -1,5 +1,5 @@
 //
-// BAGEL - Parallel electron correlation program.
+// BAGEL - Brilliantly Advanced General Electronic Structure Library
 // Filename: gamma_tensor.h
 // Copyright (C) 2014 Toru Shiozaki
 //
@@ -8,19 +8,18 @@
 //
 // This file is part of the BAGEL package.
 //
-// The BAGEL package is free software; you can redistribute it and/or modify
-// it under the terms of the GNU Library General Public License as published by
-// the Free Software Foundation; either version 3, or (at your option)
-// any later version.
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
 //
-// The BAGEL package is distributed in the hope that it will be useful,
+// This program is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-// GNU Library General Public License for more details.
+// GNU General Public License for more details.
 //
-// You should have received a copy of the GNU Library General Public License
-// along with the BAGEL package; see COPYING.  If not, write to
-// the Free Software Foundation, 675 Mass Ave, Cambridge, MA 02139, USA.
+// You should have received a copy of the GNU General Public License
+// along with this program.  If not, see <http://www.gnu.org/licenses/>.
 //
 
 #ifndef BAGEL_ASD_GAMMA_TENSOR_H
@@ -28,6 +27,7 @@
 
 #include <src/asd/gamma_forest.h>
 #include <src/asd/dimersubspace.h>
+#include <src/asd/state_tensor.h>
 
 namespace bagel {
 
@@ -140,8 +140,28 @@ class GammaTensor {
     MatView get_block_as_matview(const MonomerKey& i, const MonomerKey& j, const std::initializer_list<GammaSQ>& o) const {
       auto tensor = sparse_.at(std::make_tuple(std::list<GammaSQ>(o), i, j));
       btas::CRange<2> range(tensor->extent(0)*tensor->extent(1), tensor->extent(2));
-      return MatView(btas::make_view(range, tensor->storage()), /*localized*/false);
+      return MatView(btas::make_view(range, tensor->storage()), /*localized*/true);
     }
+
+    std::shared_ptr<Matrix> contract_block_with_statetensor(const std::array<MonomerKey,4>& keys, const std::initializer_list<GammaSQ>& ops, const std::shared_ptr<StateTensor>& statetensor, const int istate) const {
+      auto& A  = keys[0]; auto& B  = keys[1];
+      auto& Ap = keys[2]; auto& Bp = keys[3];
+
+      assert(exist(std::make_tuple(std::list<GammaSQ>(ops), A, Ap)));
+      assert(statetensor->exist(std::make_tuple(istate,Ap,Bp)));
+      assert(statetensor->exist(std::make_tuple(istate,A,B)));
+
+      auto gamma = sparse_.at(std::make_tuple(std::list<GammaSQ>(ops),A,Ap));
+      auto half = std::make_shared<btas::Tensor3<double>>(A.nstates(), Bp.nstates(), gamma->extent(2));
+      btas::contract(1.0, *gamma, {0,1,2}, statetensor->get_block(Ap,Bp,istate), {1,3}, 0.0, *half, {0,3,2});
+      auto full = std::make_shared<btas::Tensor3<double>>(B.nstates(), Bp.nstates(), half->extent(2));
+      btas::contract(1.0, *half, {0,1,2}, statetensor->get_block(A,B,istate), {0,3}, 0.0, *full, {3,1,2});
+      btas::CRange<2> range(full->extent(0)*full->extent(1), full->extent(2));
+      MatView view(btas::make_view(range, full->storage()), /*localized*/true);
+
+      return std::make_shared<Matrix>(view);
+    }
+
 };
 
 }

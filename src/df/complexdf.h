@@ -1,5 +1,5 @@
 //
-// BAGEL - Parallel electron correlation program.
+// BAGEL - Brilliantly Advanced General Electronic Structure Library
 // Filename: complexdf.h
 // Copyright (C) 2014 Toru Shiozaki
 //
@@ -8,20 +8,22 @@
 //
 // This file is part of the BAGEL package.
 //
-// The BAGEL package is free software; you can redistribute it and/or modify
-// it under the terms of the GNU Library General Public License as published by
-// the Free Software Foundation; either version 3, or (at your option)
-// any later version.
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
 //
-// The BAGEL package is distributed in the hope that it will be useful,
+// This program is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-// GNU Library General Public License for more details.
+// GNU General Public License for more details.
 //
-// You should have received a copy of the GNU Library General Public License
-// along with the BAGEL package; see COPYING.  If not, write to
-// the Free Software Foundation, 675 Mass Ave, Cambridge, MA 02139, USA.
+// You should have received a copy of the GNU General Public License
+// along with this program.  If not, see <http://www.gnu.org/licenses/>.
 //
+
+// Specialized class of DF integral tensors for complex basis functions, currently only used for GIAO
+// The design of this class is not entirely satisfactory, see issue #50 on github.com/nubakery/BAGEL
 
 
 #ifndef __SRC_DF_COMPLEXDF_H
@@ -35,6 +37,7 @@
 namespace bagel {
 
 class ComplexDFHalfDist;
+class ComplexDFFullDist;
 
 class ComplexDFDist : public DFDist, public ComplexDF_base {
   public:
@@ -91,7 +94,6 @@ class ComplexDFDist_ints : public ComplexDFDist {
       for (auto& i2 : b2shell) {
         int j1 = 0;
         for (auto& i1 : b1shell) {
-          // TODO careful
           // Since we use a real auxiliary basis set, half the 3-index integrals will be complex conjugates of the other half
           if (TBatch::Nblocks() > 1 || j1 <= j2) {
             int j0 = 0;
@@ -163,6 +165,19 @@ class ComplexDFHalfDist : public DFHalfDist, public ComplexDF_base {
     std::shared_ptr<ZMatrix> complex_form_2index(std::shared_ptr<const ComplexDFHalfDist> o, const double a, const bool swap = false) const;
     std::shared_ptr<ComplexDFHalfDist> complex_apply_J() const { return complex_apply_J(df_->data2()); }
     std::shared_ptr<ComplexDFHalfDist> complex_apply_J(const std::shared_ptr<const Matrix> o) const;
+
+    std::shared_ptr<ComplexDFFullDist> complex_compute_second_transform(const ZMatView c) const;
+    template<typename T, class = typename std::enable_if<btas::is_boxtensor<T>::value>::type>
+    std::shared_ptr<ComplexDFFullDist> complex_compute_second_transform(std::shared_ptr<T> c) const { return compute_second_transform(*c); }
+
+};
+
+
+class ComplexDFFullDist : public DFFullDist, public ComplexDF_base {
+  public:
+    ComplexDFFullDist(const std::shared_ptr<const ParallelDF> df, const int nocc, const int nocc2) : DFFullDist(df, nocc, nocc2), ComplexDF_base() { }
+
+    std::shared_ptr<ZMatrix> complex_form_4index(std::shared_ptr<const ComplexDFFullDist> o, const double a) const;
 };
 
 }

@@ -1,5 +1,5 @@
 //
-// BAGEL - Parallel electron correlation program.
+// BAGEL - Brilliantly Advanced General Electronic Structure Library
 // Filename: multipole.cc
 // Copyright (C) 2012 Toru Shiozaki
 //
@@ -8,19 +8,18 @@
 //
 // This file is part of the BAGEL package.
 //
-// The BAGEL package is free software; you can redistribute it and/or modify
-// it under the terms of the GNU Library General Public License as published by
-// the Free Software Foundation; either version 3, or (at your option)
-// any later version.
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
 //
-// The BAGEL package is distributed in the hope that it will be useful,
+// This program is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-// GNU Library General Public License for more details.
+// GNU General Public License for more details.
 //
-// You should have received a copy of the GNU Library General Public License
-// along with the BAGEL package; see COPYING.  If not, write to
-// the Free Software Foundation, 675 Mass Ave, Cambridge, MA 02139, USA.
+// You should have received a copy of the GNU General Public License
+// along with this program.  If not, see <http://www.gnu.org/licenses/>.
 //
 
 
@@ -38,8 +37,6 @@ Multipole::Multipole(shared_ptr<const Geometry> g, shared_ptr<const Matrix> d, c
 
 vector<double> Multipole::compute() const {
   vector<double> out;
-
-  const vector<vector<int>> offsets = geom_->offsets();
 
   // TODO perhaps we could reduce operation by a factor of 2
   auto o0 = geom_->offsets().begin();
@@ -81,22 +78,21 @@ vector<double> Multipole::compute() const {
   cout << "    * Permanent dipole moment:" << (jobname_.empty() ? "" : " " + jobname_) << endl;
   cout << "           (" << setw(12) << setprecision(6) << out[0] << ", " << setw(12) << out[1] << ", " << setw(12) << out[2] << ") a.u." << endl << endl;
 
-  if (rank_ >= 2) {
+  if (rank_ == 2) {
     // we need to add nuclear contribution
     // \hat xx = -\sum_i x_i^2 + \sum_N Z_N X_N^2 (same as Molpro's convention).
     array<double,6> sm = geom_->quadrupole();
     for (int i = 0; i != 6; ++i)
       out[i+3] = sm[i] - out[i+3];
-    cout << "    * Permanent quadrupole moment (around the center of charge):" << (jobname_.empty() ? "" : " " + jobname_) << endl;
+    cout << "    * Permanent second moment (around the center of charge):" << (jobname_.empty() ? "" : " " + jobname_) << endl;
     cout << "          Qxx " << setw(12) << setprecision(6) << out[3] << endl;
     cout << "          Qxy " << setw(12) << setprecision(6) << out[4] << endl;
-    cout << "          Qxz " << setw(12) << setprecision(6) << out[5] << endl;
-    cout << "          Qyy " << setw(12) << setprecision(6) << out[6] << endl;
+    cout << "          Qyy " << setw(12) << setprecision(6) << out[5] << endl;
+    cout << "          Qxz " << setw(12) << setprecision(6) << out[6] << endl;
     cout << "          Qyz " << setw(12) << setprecision(6) << out[7] << endl;
     cout << "          Qzz " << setw(12) << setprecision(6) << out[8] << endl << endl;
-  }
 
-  if (rank_ >= 3) {
+  } else if (rank_ >= 3) {
     throw logic_error("higher-order multipole integrals are implemented, but post-processing is missing");
   }
 

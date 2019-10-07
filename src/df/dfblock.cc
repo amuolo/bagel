@@ -1,5 +1,5 @@
 //
-// BAGEL - Parallel electron correlation program.
+// BAGEL - Brilliantly Advanced General Electronic Structure Library
 // Filename: dfblock.cc
 // Copyright (C) 2012 Toru Shiozaki
 //
@@ -8,19 +8,18 @@
 //
 // This file is part of the BAGEL package.
 //
-// The BAGEL package is free software; you can redistribute it and/or modify
-// it under the terms of the GNU Library General Public License as published by
-// the Free Software Foundation; either version 3, or (at your option)
-// any later version.
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
 //
-// The BAGEL package is distributed in the hope that it will be useful,
+// This program is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-// GNU Library General Public License for more details.
+// GNU General Public License for more details.
 //
-// You should have received a copy of the GNU Library General Public License
-// along with the BAGEL package; see COPYING.  If not, write to
-// the Free Software Foundation, 675 Mass Ave, Cambridge, MA 02139, USA.
+// You should have received a copy of the GNU General Public License
+// along with this program.  If not, see <http://www.gnu.org/licenses/>.
 //
 
 #include <src/df/dfblock.h>
@@ -91,6 +90,35 @@ shared_ptr<DFBlock> DFBlock::transform_third(const MatView cmat, const bool tran
 }
 
 
+shared_ptr<DFBlock> DFBlock::merge_b1(shared_ptr<const DFBlock> o) const {
+  assert(asize() == o->asize() && b2size() == o->b2size());
+  assert(astart() == o->astart() && b1start() == o->b1start() && b2start() == o->b2start());
+  assert(adist_shell_ == o->adist_shell_ && adist_ == o->adist_ && averaged_ == o->averaged_);
+
+  auto out = make_shared<DFBlock>(adist_shell_, adist_, asize(), b1size() + o->b1size(), b2size(), astart_, b1start_, b2start_, averaged_);
+  const int size1 = asize() * b1size();
+  const int size2 = o->asize() * o->b1size();
+  const int size3 = size1 + size2;
+  for (int i = 0; i != b2size(); ++i) {
+    copy_n(   data() + i*size1, size1, out->data() + i*size3);
+    copy_n(o->data() + i*size2, size2, out->data() + i*size3 + size1);
+  }
+  return out;
+}
+
+
+shared_ptr<DFBlock> DFBlock::slice_b1(const int slice_start, const int slice_size) const {
+  assert(slice_start >= 0 && slice_start + slice_size <= b1size());
+  auto out = make_shared<DFBlock>(adist_shell_, adist_, asize(), slice_size, b2size(), astart_, b1start_, b2start_, averaged_);
+  const int size1 = asize() * slice_size;
+  const int size2 = asize() * b1size();
+  for (int i = 0; i != b2size(); ++i) {
+    copy_n(data() + asize()*slice_start + i*size2, size1, out->data() + i*size1);
+  }
+  return out;
+}
+
+
 shared_ptr<DFBlock> DFBlock::clone() const {
   auto out = make_shared<DFBlock>(adist_shell_, adist_, asize(), b1size(), b2size(), astart_, b1start_, b2start_, averaged_);
   out->zero();
@@ -103,11 +131,10 @@ shared_ptr<DFBlock> DFBlock::copy() const {
 }
 
 
-void DFBlock::add_direct_product(const shared_ptr<const VectorB> a, const shared_ptr<const Matrix> b, const double fac) {
-  assert(asize() == a->size() && b1size()*b2size() == b->size());
-  dger_(asize(), b1size()*b2size(), fac, a->data(), 1, b->data(), 1, data(), asize());
+void DFBlock::add_direct_product(const VecView a, const MatView b, const double fac) {
+  assert(asize() == a.size() && b1size()*b2size() == b.size());
+  dger_(asize(), b1size()*b2size(), fac, a.data(), 1, b.data(), 1, data(), asize());
 }
-
 
 
 shared_ptr<DFBlock> DFBlock::swap() const {
@@ -183,14 +210,14 @@ shared_ptr<DFBlock> DFBlock::apply_2RDM(const Tensor4<double>& rdm, const Tensor
   // exchange contribution
   for (int i = 0; i != nclosed; ++i)
     for (int j = 0; j != nclosed; ++j)
-      daxpy_(asize(), -2.0, data()+asize()*(j+b1size()*i), 1, out->data()+asize()*(j+b1size()*i), 1);
+      blas::ax_plus_y_n(-2.0, data()+asize()*(j+b1size()*i), asize(), out->data()+asize()*(j+b1size()*i));
   // coulomb contribution
   unique_ptr<double[]> diagsum(new double[asize()]);
   fill_n(diagsum.get(), asize(), 0.0);
   for (int i = 0; i != nclosed; ++i)
-    daxpy_(asize(), 1.0, data()+asize()*(i+b1size()*i), 1, diagsum.get(), 1);
+    blas::ax_plus_y_n(1.0, data()+asize()*(i+b1size()*i), asize(), diagsum.get());
   for (int i = 0; i != nclosed; ++i)
-    daxpy_(asize(), 4.0, diagsum.get(), 1, out->data()+asize()*(i+b1size()*i), 1);
+    blas::ax_plus_y_n(4.0, diagsum.get(), asize(), out->data()+asize()*(i+b1size()*i));
 
   // act-act part
   // compress
@@ -213,11 +240,11 @@ shared_ptr<DFBlock> DFBlock::apply_2RDM(const Tensor4<double>& rdm, const Tensor
   // ASSUMING natural orbitals
   if (natural) {
     for (int i = 0; i != nact; ++i)
-      daxpy_(asize(), 2.0*rdm1(i, i), diagsum.get(), 1, out->data()+asize()*(i+nclosed+b1size()*(i+nclosed)), 1);
+      blas::ax_plus_y_n(2.0*rdm1(i, i), diagsum.get(), asize(), out->data()+asize()*(i+nclosed+b1size()*(i+nclosed)));
   } else {
     for (int i = 0; i != nact; ++i)
       for (int j = 0; j != nact; ++j)
-        daxpy_(asize(), 2.0*rdm1(j, i), diagsum.get(), 1, out->data()+asize()*(j+nclosed+b1size()*(i+nclosed)), 1);
+        blas::ax_plus_y_n(2.0*rdm1(j, i), diagsum.get(), asize(), out->data()+asize()*(j+nclosed+b1size()*(i+nclosed)));
   }
   VectorB diagsum2(asize());
   contract(1.0, group(buf,1,3), {0,1}, group(rdm1,0,2), {1}, 0.0, diagsum2, {0});
@@ -228,16 +255,91 @@ shared_ptr<DFBlock> DFBlock::apply_2RDM(const Tensor4<double>& rdm, const Tensor
   if (natural) {
     for (int i = 0; i != nact; ++i)
       for (int j = 0; j != nclosed; ++j) {
-        daxpy_(asize(), -rdm1(i, i), data()+asize()*(j+b1size()*(i+nclosed)), 1, out->data()+asize()*(j+b1size()*(i+nclosed)), 1);
-        daxpy_(asize(), -rdm1(i, i), data()+asize()*(i+nclosed+b1size()*j), 1, out->data()+asize()*(i+nclosed+b1size()*j), 1);
+        blas::ax_plus_y_n(-rdm1(i, i), data()+asize()*(j+b1size()*(i+nclosed)), asize(), out->data()+asize()*(j+b1size()*(i+nclosed)));
+        blas::ax_plus_y_n(-rdm1(i, i), data()+asize()*(i+nclosed+b1size()*j), asize(), out->data()+asize()*(i+nclosed+b1size()*j));
       }
   } else {
     for (int i0 = 0; i0 != nact; ++i0)
       for (int i1 = 0; i1 != nact; ++i1)
         for (int j = 0; j != nclosed; ++j) { // TODO be careful when rdm1 is not symmetric (e.g., transition density matrices)
-          daxpy_(asize(), -rdm1(i1, i0), data()+asize()*(j+b1size()*(i0+nclosed)), 1, out->data()+asize()*(j+b1size()*(i1+nclosed)), 1);
-          daxpy_(asize(), -rdm1(i1, i0), data()+asize()*(i0+nclosed+b1size()*j), 1, out->data()+asize()*(i1+nclosed+b1size()*j), 1);
+          blas::ax_plus_y_n(-rdm1(i1, i0), data()+asize()*(j+b1size()*(i0+nclosed)), asize(), out->data()+asize()*(j+b1size()*(i1+nclosed)));
+          blas::ax_plus_y_n(-rdm1(i1, i0), data()+asize()*(i0+nclosed+b1size()*j), asize(), out->data()+asize()*(i1+nclosed+b1size()*j));
         }
+  }
+  return out;
+}
+
+shared_ptr<DFBlock> DFBlock::apply_2RDM_tr(const Tensor4<double>& rdm, const Tensor2<double>& rdm1, const int nclosed, const int nact) const {
+  assert(nclosed+nact == b1size() && b1size() == b2size());
+  // checking if natural orbitals...
+
+  bool natural = true;
+  {
+    const double a = ddot_(nact*nact, rdm1.data(), 1, rdm1.data(), 1);
+    double sum = 0.0;
+    for (int i = 0; i != nact; ++i) sum += rdm1(i,i)*rdm1(i,i);
+    if (fabs(a-sum) > numerical_zero__*100)
+      natural = false;
+  }
+  shared_ptr<DFBlock> out = clone();
+  out->zero();
+
+  // initialize diagonal elements
+  unique_ptr<double[]> diagsum(new double[asize()]);
+  fill_n(diagsum.get(), asize(), 0.0);
+  for (int i = 0; i != nclosed; ++i)
+    blas::ax_plus_y_n(1.0, data()+asize()*(i+b1size()*i), asize(), diagsum.get());
+
+  // act-act part
+  // compress
+  auto low = {0, nclosed, nclosed};
+  auto up = {static_cast<int>(asize()), nclosed+nact, nclosed+nact};
+  Tensor3<double> buf = make_view(range().slice(low, up), storage());
+  Tensor3<double> buf2(asize(), nact, nact);
+  {
+    auto rdm2v = group(group(rdm,2,4),0,2);
+    auto buf2v = group(buf2,1,3);
+    contract(1.0, group(buf,1,3), {0,1}, rdm2v, {1,2}, 0.0, buf2v, {0,2});
+  }
+  // slot in
+  for (int i = 0; i != nact; ++i)
+    for (int j = 0; j != nact; ++j)
+      copy_n(buf2.data()+asize()*(j+nact*i), asize(), out->data()+asize()*(j+nclosed+b1size()*(i+nclosed)));
+
+  // closed-act part
+  // coulomb contribution G^ia_ia = 2*gamma_ab
+  // ASSUMING natural orbitals
+  if (natural) {
+    for (int i = 0; i != nact; ++i)
+      blas::ax_plus_y_n(2.0*rdm1(i, i), diagsum.get(), asize(), out->data()+asize()*(i+nclosed+b1size()*(i+nclosed)));
+  } else {
+    for (int i = 0; i != nact; ++i)
+      for (int j = 0; j != nact; ++j) {
+        blas::ax_plus_y_n(2.0*rdm1(j, i), diagsum.get(), asize(), out->data()+asize()*(j+nclosed+b1size()*(i+nclosed)));
+      }
+  }
+
+  VectorB diagsum2(asize());
+  contract(1.0, group(buf,1,3), {0,1}, group(rdm1,0,2), {1}, 0.0, diagsum2, {0});
+
+  for (int i = 0; i != nclosed; ++i)
+    daxpy_(asize(), 2.0, diagsum2.data(), 1, out->data()+asize()*(i+b1size()*i), 1);
+  // exchange contribution
+  if (natural) {
+    for (int i = 0; i != nact; ++i)
+      for (int j = 0; j != nclosed; ++j) {
+        blas::ax_plus_y_n(-rdm1(i, i), data()+asize()*(j+b1size()*(i+nclosed)), asize(), out->data()+asize()*(j+b1size()*(i+nclosed)));
+        blas::ax_plus_y_n(-rdm1(i, i), data()+asize()*(i+nclosed+b1size()*j), asize(), out->data()+asize()*(i+nclosed+b1size()*j));
+      }
+  } else {
+    for (int i0 = 0; i0 != nact; ++i0)
+      for (int i1 = 0; i1 != nact; ++i1) {
+        double gamma = -(rdm1(i1, i0) + rdm1(i0, i1)) * .5;
+        for (int j = 0; j != nclosed; ++j) {
+          blas::ax_plus_y_n(gamma, data()+asize()*(i1+nclosed+b1size()*j), asize(), out->data()+asize()*(j+b1size()*(i0+nclosed)));
+          blas::ax_plus_y_n(gamma, data()+asize()*(j+b1size()*(i1+nclosed)), asize(), out->data()+asize()*(i0+nclosed+b1size()*j));
+        }
+      }
   }
   return out;
 }
@@ -282,6 +384,26 @@ shared_ptr<Matrix> DFBlock::form_4index_1fixed(const shared_ptr<const DFBlock> o
   if (asize() != o->asize()) throw logic_error("illegal call of DFBlock::form_4index_1fixed");
   auto target = make_shared<Matrix>(b2size()*b1size(), o->b1size());
   dgemm_("T", "N", b1size()*b2size(), o->b1size(), asize(), a, data(), asize(), o->data()+n*asize()*o->b1size(), asize(), 0.0, target->data(), b1size()*b2size());
+  return target;
+}
+
+
+shared_ptr<Matrix> DFBlock::form_4index_diagonal() const {
+  auto target = make_shared<Matrix>(b1size(), b2size());
+  for (int i = 0; i != b2size(); ++i)
+    for (int j = 0; j != b1size(); ++j)
+      target->element(j, i) = blas::dot_product(data()+asize()*(j+b1size()*i), asize(), data()+asize()*(j+b1size()*i));
+  return target;
+}
+
+
+shared_ptr<Matrix> DFBlock::form_4index_diagonal_part() const {
+  // not very good code (assuming that b1size() is small)
+  auto target = make_shared<Matrix>(b1size()*b1size(), b2size());
+  for (int i = 0; i != b2size(); ++i)
+    for (int j = 0; j != b1size(); ++j)
+      for (int k = 0; k != b1size(); ++k)
+         target->element(k+b1size()*j, i) = blas::dot_product(data()+asize()*(k+b1size()*i), asize(), data()+asize()*(j+b1size()*i));
   return target;
 }
 
@@ -334,14 +456,71 @@ shared_ptr<Tensor3<double>> DFBlock::get_block(const int ist, const int i, const
   if (ista < 0 || jsta < 0 || ksta < 0 || ifen > asize() || jfen > b1size() || kfen > b2size())
     throw logic_error("illegal call of DFBlock::get_block");
 
-  // TODO we need 3-index tensor class here!
   auto out = make_shared<Tensor3<double>>(i, j, k);
   for (int kk = ksta; kk != kfen; ++kk)
     for (int jj = jsta; jj != jfen; ++jj)
-      for (int ii = ista; ii != ifen; ++ii)
-        (*out)(ii-ista, jj-jsta, kk-ksta) = (*this)(ii, jj, kk);
+      copy_n(&((*this)(ista, jj, kk)), ifen-ista, &((*out)(0, jj-jsta, kk-ksta)));
 
   return out;
+}
+
+
+DFBlock& DFBlock::operator=(const DFBlock& o) {
+  btas::Tensor3<double>::operator=(o);
+  adist_shell_ = o.adist_shell_;
+  adist_ = o.adist_;
+  averaged_ = o.averaged_;
+  astart_ = o.astart_;
+  b1start_ = o.b1start_;
+  b2start_ = o.b2start_;
+  return *this;
+}
+
+
+DFBlock& DFBlock::operator=(DFBlock&& o) {
+  btas::Tensor3<double>::operator=(move(o));
+  adist_shell_ = o.adist_shell_;
+  adist_ = o.adist_;
+  averaged_ = o.averaged_;
+  astart_ = o.astart_;
+  b1start_ = o.b1start_;
+  b2start_ = o.b2start_;
+  return *this;
+}
+
+
+void DFBlock::symmetrize() {
+  if (b1size() != b2size()) throw logic_error("illegal call of DFBlock::symmetrize()");
+  const int n = b1size();
+  for (int i = 0; i != n; ++i)
+    for (int j = i; j != n; ++j) {
+      blas::ax_plus_y_n(1.0, data()+asize()*(j+n*i), asize(), data()+asize()*(i+n*j));
+      copy_n(data()+asize()*(i+n*j), asize(), data()+asize()*(j+n*i));
+    }
+}
+
+
+void DFBlock::copy_block(shared_ptr<MatView> o, const int jdim, const size_t offset) {
+  assert(o->size() == asize()*jdim);
+  copy_n(o->data(), asize()*jdim, data()+offset);
+}
+
+
+void DFBlock::copy_block(MatView o, const int jdim, const size_t offset) {
+  assert(o.size() == asize()*jdim);
+  copy_n(o.data(), asize()*jdim, data()+offset);
+}
+
+
+void DFBlock::add_block(shared_ptr<MatView> o, const int jdim, const size_t offset, const double fac) {
+  assert(o->size() == asize()*jdim);
+  blas::ax_plus_y_n(fac, o->data(), asize()*jdim, data()+offset);
+}
+
+
+void DFBlock::add_block(MatView o, const int jdim, const size_t offset, const double fac) {
+  assert(o.size() == asize()*jdim);
+  blas::ax_plus_y_n(fac, o.data(), asize()*jdim, data()+offset);
 }
 
 
@@ -357,8 +536,8 @@ void DFBlock::average() {
   size_t t_start, t_end;
   tie(t_start, t_end) = adist_->range(myrank);
 
-  assert(o_end - t_end >= 0);
-  assert(o_start - t_start >= 0);
+  assert(o_end >= t_end);
+  assert(o_start >= t_start);
 
   // TODO so far I am not considering the cases when data must be sent to the next neighbor; CAUTION
   const size_t asendsize = o_end - t_end;

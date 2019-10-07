@@ -1,5 +1,5 @@
 //
-// BAGEL - Parallel electron correlation program.
+// BAGEL - Brilliantly Advanced General Electronic Structure Library
 // Filename: zcasscf.h
 // Copyright (C) 2013 Toru Shiozaki
 //
@@ -8,19 +8,18 @@
 //
 // This file is part of the BAGEL package.
 //
-// The BAGEL package is free software; you can redistribute it and/or modify
-// it under the terms of the GNU Library General Public License as published by
-// the Free Software Foundation; either version 3, or (at your option)
-// any later version.
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
 //
-// The BAGEL package is distributed in the hope that it will be useful,
+// This program is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-// GNU Library General Public License for more details.
+// GNU General Public License for more details.
 //
-// You should have received a copy of the GNU Library General Public License
-// along with the BAGEL package; see COPYING.  If not, write to
-// the Free Software Foundation, 675 Mass Ave, Cambridge, MA 02139, USA.
+// You should have received a copy of the GNU General Public License
+// along with this program.  If not, see <http://www.gnu.org/licenses/>.
 //
 
 #ifndef __SRC_ZCASSCF_ZCASSCF_H
@@ -28,9 +27,7 @@
 
 #include <src/ci/zfci/zharrison.h>
 #include <src/multi/casscf/rotfile.h>
-#include <src/wfn/method.h>
-#include <src/util/math/bfgs.h>
-#include <src/util/math/step_restrict_bfgs.h>
+#include <src/util/muffle.h>
 
 namespace bagel {
 
@@ -48,84 +45,68 @@ class ZCASSCF : public Method, public std::enable_shared_from_this<ZCASSCF> {
 
     bool gaunt_;
     bool breit_;
-    bool no_kramers_init_;
     bool natocc_;
+    bool canonical_;
 
-    // enforce time-reversal symmetry
-    bool tsymm_;
+    // set if RDMs are given externally (e.g., FCIQMC)
+    std::string external_rdm_;
 
     double thresh_;
     double thresh_micro_;
-    std::complex<double> rms_grad_;
-    std::complex<double> level_shift_;
+    double thresh_overlap_;
+    bool conv_ignore_;
+    bool restart_cas_;
 
     int nstate_;
 
     int max_iter_;
     int max_micro_iter_;
 
-    std::shared_ptr<const ZMatrix> coeff_;
+    std::shared_ptr<const ZCoeff_Block> coeff_;
     std::shared_ptr<const Matrix>  nr_coeff_;
     std::shared_ptr<const ZMatrix> hcore_;
     std::shared_ptr<const ZMatrix> overlap_;
-    std::vector<double> occup_;
 
     void print_header() const;
-    void print_iteration(int iter, int miter, int tcount, const std::vector<double> energy, const double error, const double time) const;
+    void print_iteration(const int iter, const std::vector<double>& energy, const double error, const double time) const;
 
     void init();
-    void init_kramers_coeff();
+    virtual void init_mat1e() = 0;
+    virtual void init_coeff() = 0;
 
-    void mute_stdcout() const;
-    void resume_stdcout() const;
+    // hides some outputs
+    mutable std::shared_ptr<Muffle> muffle_;
 
     std::shared_ptr<ZHarrison> fci_;
-    // compute F^{A} matrix ; see Eq. (18) in Roos IJQC 1980
-    std::shared_ptr<const ZMatrix> active_fock(std::shared_ptr<const ZMatrix>, const bool with_hcore = false, const bool bfgs = false);
-    // transform RDM from bitset representation in ZFCI to CAS format
-    std::shared_ptr<const ZMatrix> transform_rdm1() const;
+    // Fock matrix with active 1RDM
+    std::shared_ptr<ZMatrix> compute_active_fock(const ZMatView acoeff, std::shared_ptr<const ZMatrix> rdm1, const bool coulomb_only = false) const;
+
+    // Canonicalize the orbitals
+    std::tuple<std::shared_ptr<const ZCoeff_Block>,VectorB,VectorB,VectorB,VectorB> semi_canonical_orb(const bool kramers) const;
+    VectorB eig_;
+    VectorB eigB_;
+    VectorB occup_;
+    VectorB occupB_;
 
     // energy
     std::vector<double> energy_;
-    std::vector<double> prev_energy_;
-    double micro_energy_;
 
     // internal functions
-    // force time-reversal symmetry for a zmatrix with given number of virtual orbitals
-    void kramers_adapt(std::shared_ptr<ZMatrix> o, const int nvirt) const;
+    virtual void impose_symmetry(std::shared_ptr<ZMatrix> o) const = 0;
+    virtual void impose_symmetry(std::shared_ptr<ZRotFile> o) const = 0;
 
+    // used to zero out elements for positronic-electronic rotations
     void zero_positronic_elements(std::shared_ptr<ZRotFile> rot);
 
-    std::shared_ptr<ZMatrix> nonrel_to_relcoeff(const bool stripes = true) const;
+    std::shared_ptr<ZCoeff_Kramers> nonrel_to_relcoeff(std::shared_ptr<const Matrix> nr_coeff) const;
+    std::shared_ptr<const Reference> conv_to_ref_(const bool kramers) const;
 
   public:
-    ZCASSCF(const std::shared_ptr<const PTree> idat, const std::shared_ptr<const Geometry> geom, const std::shared_ptr<const Reference> ref = nullptr);
+    ZCASSCF(std::shared_ptr<const PTree> idat, std::shared_ptr<const Geometry> geom, std::shared_ptr<const Reference> ref = nullptr);
 
     virtual void compute() override = 0;
 
-    // TODO : add FCI quantities to reference
-    std::shared_ptr<const Reference> conv_to_ref() const override;
-
-    // diagonalize 1RDM to obtain natural orbital transformation matrix and natural orbital occupation numbers
-    std::shared_ptr<ZMatrix> make_natural_orbitals(std::shared_ptr<const ZMatrix> rdm1);
-    // natural orbital transformations for the 1 and 2 RDMs, the coefficient, and qvec
-    std::shared_ptr<const ZMatrix> natorb_rdm1_transform(const std::shared_ptr<ZMatrix> coeff, std::shared_ptr<const ZMatrix> rdm1) const;
-    std::shared_ptr<const ZMatrix> natorb_rdm2_transform(const std::shared_ptr<ZMatrix> coeff, std::shared_ptr<const ZMatrix> rdm2) const;
-    std::shared_ptr<const ZMatrix> update_coeff(std::shared_ptr<const ZMatrix> cold, std::shared_ptr<const ZMatrix> natorb) const;
-    std::shared_ptr<const ZMatrix> update_qvec(std::shared_ptr<const ZMatrix> qold, std::shared_ptr<const ZMatrix> natorb) const;
-    // coeff format transformation is a static function!
-    static std::shared_ptr<ZMatrix> format_coeff(const int nclosed, const int nact, const int nvirt, std::shared_ptr<const ZMatrix> coeff, const bool striped = true);
-    // kramers adapt for RotFile is a static function!
-    static void kramers_adapt(std::shared_ptr<ZRotFile> o, const int nclosed, const int nact, const int nvirt);
-    // function to generate modified virtual MOs from either a Fock matrix or the one-electron Hamiltonian
-    std::shared_ptr<const ZMatrix> generate_mvo(const int ncore, const bool hcore_mvo = false);
-    // print natural orbital occupation numbers
-    void print_natocc() const;
-
-    // rearrange coefficient to {c,a,v} by selecting active columns from input coefficient
-    // -- static so it can also be used by ZFCI
-    static std::shared_ptr<const ZMatrix> set_active(std::set<int> active_indices, std::shared_ptr<const ZMatrix> coeff,
-                                                     const int nclosed, const int nele, const int nact, const bool paired);
+    virtual std::shared_ptr<const Reference> conv_to_ref() const override = 0;
 
     // functions to retrieve protected members
     int nocc() const { return nocc_; }
@@ -135,21 +116,18 @@ class ZCASSCF : public Method, public std::enable_shared_from_this<ZCASSCF> {
     int nvirtnr() const { return nvirtnr_; }
     int nbasis() const { return nbasis_; }
     int nstate() const { return nstate_; }
+    int charge() const { return charge_; }
     int max_iter() const { return max_iter_; }
     int max_micro_iter() const { return max_micro_iter_; }
     double thresh() const { return thresh_; }
     double thresh_micro() const { return thresh_micro_; }
-    double occup(const int i) const { return occup_[i]; }
-    std::complex<double> rms_grad() const { return rms_grad_; }
-    bool tsymm() const { return tsymm_; }
-    // function to copy electronic rotations from a rotation file TODO: make lambda
-    std::shared_ptr<ZRotFile> copy_electronic_rotations(std::shared_ptr<const ZRotFile> rot) const;
-    // function to copy positronic rotations from a rotation file TODO: make lambda
-    std::shared_ptr<ZRotFile> copy_positronic_rotations(std::shared_ptr<const ZRotFile> rot) const;
+    double thresh_overlap() const { return thresh_overlap_; }
+    double energy(const int i) const { return energy_.at(i); }
+    std::vector<double> energy() const { return energy_; }
 
+    std::shared_ptr<const ZHarrison> fci() const { return fci_; }
+    std::shared_ptr<const ZCoeff_Block> coeff() const { return coeff_; }
 };
-
-static const double zoccup_thresh = 1.0e-10;
 
 }
 

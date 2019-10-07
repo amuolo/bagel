@@ -1,5 +1,5 @@
 //
-// BAGEL - Parallel electron correlation program.
+// BAGEL - Brilliantly Advanced General Electronic Structure Library
 // Filename: hrrlist.h
 // Copyright (C) 2009 Toru Shiozaki
 //
@@ -8,19 +8,18 @@
 //
 // This file is part of the BAGEL package.
 //
-// The BAGEL package is free software; you can redistribute it and/or modify
-// it under the terms of the GNU Library General Public License as published by
-// the Free Software Foundation; either version 3, or (at your option)
-// any later version.
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
 //
-// The BAGEL package is distributed in the hope that it will be useful,
+// This program is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-// GNU Library General Public License for more details.
+// GNU General Public License for more details.
 //
-// You should have received a copy of the GNU Library General Public License
-// along with the BAGEL package; see COPYING.  If not, write to
-// the Free Software Foundation, 675 Mass Ave, Cambridge, MA 02139, USA.
+// You should have received a copy of the GNU General Public License
+// along with this program.  If not, see <http://www.gnu.org/licenses/>.
 //
 
 //
@@ -62,6 +61,15 @@ struct HRRList {
   static void perform_HRR_a0_64(const int, const double*, const std::array<double,3>&, double*);
   static void perform_HRR_b0_65(const int, const double*, const std::array<double,3>&, double*);
   static void perform_HRR_c0_66(const int, const double*, const std::array<double,3>&, double*);
+#ifdef COMPILE_J_ORB
+  static void perform_HRR_80_71(const int, const double*, const std::array<double,3>&, double*);
+  static void perform_HRR_90_72(const int, const double*, const std::array<double,3>&, double*);
+  static void perform_HRR_a0_73(const int, const double*, const std::array<double,3>&, double*);
+  static void perform_HRR_b0_74(const int, const double*, const std::array<double,3>&, double*);
+  static void perform_HRR_c0_75(const int, const double*, const std::array<double,3>&, double*);
+  static void perform_HRR_d0_76(const int, const double*, const std::array<double,3>&, double*);
+  static void perform_HRR_e0_77(const int, const double*, const std::array<double,3>&, double*);
+#endif
 
   void hrrfunc_call(const unsigned int i, const int a0, const double* a1, const std::array<double,3>& a2, double* a3) const {
     return hrrfunc[i](a0, a1, a2, a3);
@@ -95,6 +103,15 @@ struct CHRRList {
   static void perform_HRR_a0_64(const int, const std::complex<double>*, const std::array<double,3>&, std::complex<double>*);
   static void perform_HRR_b0_65(const int, const std::complex<double>*, const std::array<double,3>&, std::complex<double>*);
   static void perform_HRR_c0_66(const int, const std::complex<double>*, const std::array<double,3>&, std::complex<double>*);
+#ifdef COMPILE_J_ORB
+  static void perform_HRR_80_71(const int, const std::complex<double>*, const std::array<double,3>&, std::complex<double>*);
+  static void perform_HRR_90_72(const int, const std::complex<double>*, const std::array<double,3>&, std::complex<double>*);
+  static void perform_HRR_a0_73(const int, const std::complex<double>*, const std::array<double,3>&, std::complex<double>*);
+  static void perform_HRR_b0_74(const int, const std::complex<double>*, const std::array<double,3>&, std::complex<double>*);
+  static void perform_HRR_c0_75(const int, const std::complex<double>*, const std::array<double,3>&, std::complex<double>*);
+  static void perform_HRR_d0_76(const int, const std::complex<double>*, const std::array<double,3>&, std::complex<double>*);
+  static void perform_HRR_e0_77(const int, const std::complex<double>*, const std::array<double,3>&, std::complex<double>*);
+#endif
 
   void hrrfunc_call(const unsigned int i, const int a0, const std::complex<double>* a1, const std::array<double,3>& a2, std::complex<double>* a3) const {
     return hrrfunc[i](a0, a1, a2, a3);

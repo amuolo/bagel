@@ -1,5 +1,5 @@
 //
-// BAGEL - Parallel electron correlation program.
+// BAGEL - Brilliantly Advanced General Electronic Structure Library
 // Filename: asd_dmrg/product_rasci.cc
 // Copyright (C) 2014 Toru Shiozaki
 //
@@ -8,19 +8,18 @@
 //
 // This file is part of the BAGEL package.
 //
-// The BAGEL package is free software; you can redistribute it and/or modify
-// it under the terms of the GNU Library General Public License as published by
-// the Free Software Foundation; either version 3, or (at your option)
-// any later version.
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
 //
-// The BAGEL package is distributed in the hope that it will be useful,
+// This program is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-// GNU Library General Public License for more details.
+// GNU General Public License for more details.
 //
-// You should have received a copy of the GNU Library General Public License
-// along with the BAGEL package; see COPYING.  If not, write to
-// the Free Software Foundation, 675 Mass Ave, Cambridge, MA 02139, USA.
+// You should have received a copy of the GNU General Public License
+// along with this program.  If not, see <http://www.gnu.org/licenses/>.
 //
 
 #include <src/asd/dmrg/product_rasci.h>
@@ -34,9 +33,6 @@ ProductRASCI::ProductRASCI(shared_ptr<const PTree> input, shared_ptr<const Refer
  : input_(input), ref_(ref), left_(left)
 {
   print_header();
-
-  // at the moment I only care about C1 symmetry, with dynamics in mind
-  if (ref_->geom()->nirrep() > 1) throw runtime_error("RASCI: C1 only at the moment.");
 
   max_iter_ = input_->get<int>("maxiter", 100);
   davidson_subspace_ = input_->get<int>("davidson_subspace", 5);
@@ -79,9 +75,18 @@ ProductRASCI::ProductRASCI(shared_ptr<const PTree> input, shared_ptr<const Refer
 
   // nspin is #unpaired electron 0:singlet, 1:doublet, 2:triplet, ... (i.e., Molpro convention).
   const int nspin = input_->get<int>("nspin", 0);
-  if ((ref_->geom()->nele()+nspin-charge) % 2 != 0) throw runtime_error("Invalid nspin specified");
-  nelea_ = (ref_->geom()->nele()+nspin-charge)/2 - ncore_;
-  neleb_ = (ref_->geom()->nele()-nspin-charge)/2 - ncore_;
+  const bool extern_nactele = input_->get<bool>("extern_nactele", false);
+  if (!extern_nactele) {
+    if ((ref_->geom()->nele()+nspin-charge) % 2 != 0) throw runtime_error("Invalid nspin specified in ProductRASCI");
+    nelea_ = (ref_->geom()->nele()+nspin-charge)/2 - ncore_;
+    neleb_ = (ref_->geom()->nele()-nspin-charge)/2 - ncore_;
+  } else {
+    const int nactele = input_->get<int>("nactele");
+    nelea_ = (nactele+nspin-charge) / 2;
+    if ((nactele+nspin-charge) % 2 != 0) throw runtime_error("Invalid nspin specified in ProductRASCI");
+    neleb_ = nactele - charge - nelea_;
+    assert(neleb_ == (nactele-nspin-charge)/2);
+  }
 
   // TODO allow for zero electron (quick return)
   if (nelea_ < 0 || neleb_ < 0) throw runtime_error("#electrons cannot be negative in ProductRASCI");
@@ -127,27 +132,8 @@ void ProductRASCI::compute() {
   vector<shared_ptr<ProductRASCivec>> cc(nstate_);
   generate(cc.begin(), cc.end(), [this] () { return make_shared<ProductRASCivec>(space_, left_, nelea_, neleb_); });
 
-#ifdef DEBUG
-  resources__->proc()->cout_on();
-  for (int i = 0 ; i < mpi__->size(); ++i) {
-    if (i == mpi__->rank()) {
-      cout << "rank " << i << ":" << endl;
-#endif
-#if 0
-      cout << "  - block states:" << endl;
-      for (auto& i : denom_->sectors())
-        cout << "    - " << i.second->mdim() << " states with " << i.first.nelea << " alpha and " << i.first.neleb << " beta electrons" << endl;
-#else
-      cout << "  - block states: " << left_->nstates() << endl;
-#endif
-      cout << "  - total size of configuration space: " << denom_->size() << endl;
-#ifdef DEBUG
-    }
-    mpi__->barrier();
-    this_thread::sleep_for(sleeptime__);
-  }
-  resources__->proc()->cout_off();
-#endif
+  cout << "  - block states: " << left_->nstates() << endl;
+  cout << "  - total size of configuration space: " << denom_->size() << endl;
 
   // find determinants that have small diagonal energies
   model_guess(cc);

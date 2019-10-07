@@ -1,5 +1,5 @@
 //
-// BAGEL - Parallel electron correlation program.
+// BAGEL - Brilliantly Advanced General Electronic Structure Library
 // Filename: asd_cas.cc
 // Copyright (C) 2012 Toru Shiozaki
 //
@@ -8,19 +8,18 @@
 //
 // This file is part of the BAGEL package.
 //
-// The BAGEL package is free software; you can redistribute it and/or modify
-// it under the terms of the GNU Library General Public License as published by
-// the Free Software Foundation; either version 3, or (at your option)
-// any later version.
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
 //
-// The BAGEL package is distributed in the hope that it will be useful,
+// This program is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-// GNU Library General Public License for more details.
+// GNU General Public License for more details.
 //
-// You should have received a copy of the GNU Library General Public License
-// along with the BAGEL package; see COPYING.  If not, write to
-// the Free Software Foundation, 675 Mass Ave, Cambridge, MA 02139, USA.
+// You should have received a copy of the GNU General Public License
+// along with this program.  If not, see <http://www.gnu.org/licenses/>.
 //
 
 #include <src/asd/asd_cas.h>
@@ -30,7 +29,7 @@
 using namespace std;
 using namespace bagel;
 
-shared_ptr<CASDvec> ASD_CAS::form_sigma(shared_ptr<const CASDvec> ccvec, std::shared_ptr<const MOFile> jop) const {
+shared_ptr<CASDvec> ASD_CAS::form_sigma(shared_ptr<const CASDvec> ccvec, shared_ptr<const MOFile> jop) const {
   const int nstates = ccvec->ij();
 
   shared_ptr<const Determinants> det = ccvec->det();
@@ -188,4 +187,120 @@ void ASD_CAS::sigma_2ab_3(shared_ptr<Civec> sigma, shared_ptr<Dvec> e) const {
       }
     }
   }
+}
+
+
+tuple<shared_ptr<RDM<1>>,shared_ptr<RDM<2>>> ASD_CAS::compute_rdm12_monomer(shared_ptr<const CASDvec> civec, const int i) const {
+  shared_ptr<const Civec> cbra = civec->data(i);
+  shared_ptr<const Civec> cket = civec->data(i);
+
+  const int norb = cbra->det()->norb();
+  assert(*cbra->det() == *cket->det());
+
+  // since we consider here number conserving operators...
+  auto dbra = make_shared<Dvec>(cbra->det(), norb*norb);
+  dbra->zero();
+  sigma_2a1(cbra, dbra);
+  sigma_2a2(cbra, dbra);
+
+  return compute_rdm12_last_step(cbra, dbra);
+}
+
+
+tuple<shared_ptr<RDM<1>>, shared_ptr<RDM<2>>> ASD_CAS::compute_rdm12_last_step(shared_ptr<const Civec> cibra, shared_ptr<const Dvec> dbra) const {
+  const int norb = cibra->det()->norb();
+  const int nri = dbra->lena()*dbra->lenb();
+  const int ij  = norb*norb;
+
+  // 1RDM
+  // c^dagger <I|\hat{E}|0>
+  auto rdm1 = make_shared<RDM<1>>(norb);
+  dgemv_("T", nri, ij, 1.0, dbra->data(0)->data(), nri, cibra->data(), 1, 0.0, rdm1->data(), 1);
+
+  // 2RDM
+  // \sum_I <0|\hat{E}|I> <I|\hat{E}|0>
+  auto rdm2 = make_shared<RDM<2>>(norb);
+  dgemm_("T", "N", ij, ij, nri, 1.0, dbra->data(0)->data(), nri, dbra->data(0)->data(), nri, 0.0, rdm2->data(), ij);
+
+  // sorting... a bit stupid but cheap anyway
+  // This is since we transpose operator pairs in dgemm - cheaper to do so after dgemm (usually Nconfig >> norb**2).
+  unique_ptr<double[]> buf(new double[norb*norb]);
+  for (int i = 0; i != norb; ++i) {
+    for (int k = 0; k != norb; ++k) {
+      copy_n(rdm2->element_ptr(0,0,k,i), norb*norb, buf.get());
+      blas::transpose(buf.get(), norb, norb, rdm2->element_ptr(0,0,k,i));
+    }
+  }
+
+  // put in diagonal into 2RDM
+  // Gamma{i+ k+ l j} = Gamma{i+ j k+ l} - delta_jk Gamma{i+ l}
+  for (int i = 0; i != norb; ++i)
+    for (int k = 0; k != norb; ++k)
+      for (int j = 0; j != norb; ++j)
+        rdm2->element(j,k,k,i) -= rdm1->element(j,i);
+
+  return tie(rdm1, rdm2);
+}
+
+
+void ASD_CAS::sigma_2a1(shared_ptr<const Civec> cc, shared_ptr<Dvec> d) const {
+  assert(d->det() == cc->det());
+  const int lb = d->lenb();
+  const int ij = d->ij();
+  const double* const source_base = cc->data();
+  for (int ip = 0; ip != ij; ++ip) {
+    double* const target_base = d->data(ip)->data();
+    for (auto& iter : cc->det()->phia(ip)) {
+      const double sign = static_cast<double>(iter.sign);
+      double* const target_array = target_base + iter.source*lb;
+      blas::ax_plus_y_n(sign, source_base + iter.target*lb, lb, target_array);
+    }
+  }
+}
+
+
+void ASD_CAS::sigma_2a2(shared_ptr<const Civec> cc, shared_ptr<Dvec> d) const {
+  assert(d->det() == cc->det());
+  const int la = d->lena();
+  const int ij = d->ij();
+  for (int i = 0; i < la; ++i) {
+    const double* const source_array0 = cc->element_ptr(0, i);
+    for (int ip = 0; ip != ij; ++ip) {
+      double* const target_array0 = d->data(ip)->element_ptr(0, i);
+      for (auto& iter : cc->det()->phib(ip)) {
+        const double sign = static_cast<double>(iter.sign);
+        target_array0[iter.source] += sign * source_array0[iter.target];
+      }
+    }
+  }
+}
+
+
+shared_ptr<CASDvec> ASD_CAS::contract_I(shared_ptr<const CASDvec> A, shared_ptr<Matrix> adiabats, int ioff, int nstA, int nstB, int kst) const {
+  auto out = make_shared<CASDvec>(A->det(), nstB);
+  for (int j = 0; j != nstB; ++j) {
+    for (int i = 0; i != nstA; ++i) {
+      const int ij  = i  + (j*nstA);
+      double u_ij = adiabats->element(ioff+ij,kst);
+
+      out->data(j)->ax_plus_y(u_ij, A->data(i));
+
+    }
+  }
+  return out;
+}
+
+
+shared_ptr<CASDvec> ASD_CAS::contract_J(shared_ptr<const CASDvec> B, shared_ptr<Matrix> adiabats, int ioff, int nstA, int nstB, int kst) const {
+  auto out = make_shared<CASDvec>(B->det(), nstA);
+  for (int i = 0; i != nstA; ++i) {
+    for (int j = 0; j != nstB; ++j) {
+      const int ij  = i  + (j*nstA);
+      double u_ij = adiabats->element(ioff+ij,kst);
+
+      out->data(i)->ax_plus_y(u_ij, B->data(j));
+
+    }
+  }
+  return out;
 }

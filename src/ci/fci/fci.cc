@@ -1,5 +1,5 @@
 //
-// BAGEL - Parallel electron correlation program.
+// BAGEL - Brilliantly Advanced General Electronic Structure Library
 // Filename: fci.cc
 // Copyright (C) 2011 Toru Shiozaki
 //
@@ -8,35 +8,84 @@
 //
 // This file is part of the BAGEL package.
 //
-// The BAGEL package is free software; you can redistribute it and/or modify
-// it under the terms of the GNU Library General Public License as published by
-// the Free Software Foundation; either version 3, or (at your option)
-// any later version.
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
 //
-// The BAGEL package is distributed in the hope that it will be useful,
+// This program is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-// GNU Library General Public License for more details.
+// GNU General Public License for more details.
 //
-// You should have received a copy of the GNU Library General Public License
-// along with the BAGEL package; see COPYING.  If not, write to
-// the Free Software Foundation, 675 Mass Ave, Cambridge, MA 02139, USA.
+// You should have received a copy of the GNU General Public License
+// along with this program.  If not, see <http://www.gnu.org/licenses/>.
 //
 
 #include <src/ci/fci/fci.h>
+#include <src/ci/fci/harrison.h>
+#include <src/ci/fci/knowles.h>
 #include <src/ci/fci/space.h>
 #include <src/ci/fci/modelci.h>
 #include <src/util/combination.hpp>
+#include <src/util/exception.h>
+#include <src/prop/multipole.h>
 
 using namespace std;
 using namespace bagel;
 
 BOOST_CLASS_EXPORT_IMPLEMENT(FCI)
 
-FCI::FCI(std::shared_ptr<const PTree> idat, shared_ptr<const Geometry> g, shared_ptr<const Reference> r, const int ncore, const int norb, const int nstate)
- : Method(idat, g, r), ncore_(ncore), norb_(norb), nstate_(nstate), restarted_(false) {
+FCI::FCI(shared_ptr<const PTree> idat, shared_ptr<const Geometry> g, shared_ptr<const Reference> r,
+         const int ncore, const int norb, const int nstate, const bool store)
+ : FCI_base(idat, g, r, ncore, norb, nstate, store) {
   common_init();
 }
+
+HarrisonZarrabian::HarrisonZarrabian(shared_ptr<const PTree> a, shared_ptr<const Geometry> g, shared_ptr<const Reference> b,
+                                     const int ncore, const int nocc, const int nstate, const bool store) : FCI(a, g, b, ncore, nocc, nstate, store) {
+  space_ = make_shared<HZSpace>(det_);
+  update(ref_->coeff());
+  if (idata_->get<bool>("only_ints", false)) {
+    OArchive ar("ref");
+    ar << ref_;
+    dump_ints();
+    throw Termination("MO integrals are dumped on a file.");
+  }
+}
+
+
+KnowlesHandy::KnowlesHandy(shared_ptr<const PTree> a, shared_ptr<const Geometry> g, shared_ptr<const Reference> b,
+                           const int ncore, const int nocc, const int nstate, const bool store) : FCI(a, g, b, ncore, nocc, nstate, store) {
+  update(ref_->coeff());
+  if (idata_->get<bool>("only_ints", false)) {
+    OArchive ar("ref");
+    ar << ref_;
+    dump_ints();
+    throw Termination("MO integrals are dumped on a file.");
+  }
+}
+
+
+KnowlesHandy::KnowlesHandy(shared_ptr<const CIWfn> ci, shared_ptr<const Reference> r) {
+  print_thresh_ = 1.0e-8;
+  nelea_ = ci->det()->nelea();
+  neleb_ = ci->det()->neleb();
+  ncore_ = ci->ncore();
+  norb_  = ci->nact();
+  nstate_ = ci->nstates();
+  energy_ = ci->energies();
+  cc_ = ci->civectors()->copy();
+// Since the determinant space might not be compatible, reconstruct determinant space
+  det_ = make_shared<const Determinants>(norb_, nelea_, neleb_, /*compress=*/true, /*mute=*/true);
+  rdm1_ = make_shared<VecRDM<1>>();
+  rdm2_ = make_shared<VecRDM<2>>();
+  ref_ = r;
+  store_half_ints_ = false;
+  weight_ = vector<double>(nstate_, 1.0/static_cast<double>(nstate_));
+  update(ref_->coeff());
+}
+
 
 
 void FCI::common_init() {
@@ -68,9 +117,8 @@ void FCI::common_init() {
     if (norb_  < 0) norb_ = idata_->get<int>("norb", ref_->coeff()->mdim()-ncore_);
   }
 
-  // Configure properties to be calculated on the final wavefunctions
-  if (idata_->get<bool>("dipoles", false))
-    properties_.push_back(make_shared<CIDipole>(ref_, ncore_, ncore_+norb_));
+  // calculate dipole moments if requested
+  dipoles_ = idata_->get<bool>("dipoles", false);
 
   // additional charge
   const int charge = idata_->get<int>("charge", 0);
@@ -95,6 +143,7 @@ void FCI::common_init() {
 
   // construct a determinant space in which this FCI will be performed.
   det_ = make_shared<const Determinants>(norb_, nelea_, neleb_);
+
 }
 
 
@@ -168,11 +217,17 @@ void FCI::generate_guess(const int nspin, const int nstate, shared_ptr<Dvec> out
 
   // Spin adapt detseeds
   int oindex = 0;
-  vector<bitset<nbit__>> done;
+  vector<bitset<nbit__>> done_open;
+  vector<bitset<nbit__>> done_closed;
   for (auto& it : bits) {
     bitset<nbit__> alpha = it.second;
     bitset<nbit__> beta = it.first;
     bitset<nbit__> open_bit = (alpha^beta);
+    bitset<nbit__> closed_bit = (alpha&beta);
+
+    // This can happen if all possible determinants are checked without finding nstate acceptable ones.
+    if (alpha.count() + beta.count() != nelea_ + neleb_)
+      throw logic_error("FCI::generate_guess produced an invalid determinant.  Check the number of states being requested.");
 
     // make sure that we have enough unpaired alpha
     const int unpairalpha = (alpha ^ (alpha & beta)).count();
@@ -180,8 +235,9 @@ void FCI::generate_guess(const int nspin, const int nstate, shared_ptr<Dvec> out
     if (unpairalpha-unpairbeta < nelea_-neleb_) continue;
 
     // check if this orbital configuration is already used
-    if (find(done.begin(), done.end(), open_bit) != done.end()) continue;
-    done.push_back(open_bit);
+    if ((find(done_open.begin(), done_open.end(), open_bit) != done_open.end()) && (find(done_closed.begin(), done_closed.end(), closed_bit) != done_closed.end())) continue;
+    done_open.push_back(open_bit);
+    done_closed.push_back(closed_bit);
 
     pair<vector<tuple<int, int, int>>, double> adapt = det()->spin_adapt(nelea_-neleb_, alpha, beta);
     const double fac = adapt.second;
@@ -191,7 +247,7 @@ void FCI::generate_guess(const int nspin, const int nstate, shared_ptr<Dvec> out
     out->data(oindex)->spin_decontaminate();
 
     cout << "     guess " << setw(3) << oindex << ":   closed " <<
-          setw(20) << left << print_bit(alpha&beta, norb_) << " open " << setw(20) << print_bit(open_bit, norb_) << right << endl;
+          setw(20) << left << print_bit(closed_bit, norb_) << " open " << setw(20) << print_bit(open_bit, norb_) << right << endl;
 
     ++oindex;
     if (oindex == nstate) break;
@@ -205,7 +261,7 @@ void FCI::generate_guess(const int nspin, const int nstate, shared_ptr<Dvec> out
 }
 
 // returns seed determinants for initial guess
-vector<pair<bitset<nbit__> , bitset<nbit__>>> FCI::detseeds(const int ndet) {
+vector<pair<bitset<nbit__> , bitset<nbit__>>> FCI::detseeds(const int ndet) const {
   multimap<double, pair<bitset<nbit__>,bitset<nbit__>>> tmp;
   for (int i = 0; i != ndet; ++i) tmp.emplace(-1.0e10*(1+i), make_pair(bitset<nbit__>(0),bitset<nbit__>(0)));
 
@@ -236,17 +292,14 @@ void FCI::print_header() const {
 
 
 shared_ptr<const CIWfn> FCI::conv_to_ciwfn() const {
-  return make_shared<CIWfn>(geom_, ncore_, norb_, nstate_, energy_, cc_, cc_->det());
+  return make_shared<CIWfn>(geom_, ncore_, norb_, nstate_, energy_, cc_, det_);
 }
 
 
 void FCI::compute() {
-  Timer pdebug(2);
+  Timer pdebug(3);
 
   if (!restarted_) {
-    // at the moment I only care about C1 symmetry, with dynamics in mind
-    if (geom_->nirrep() > 1) throw runtime_error("FCI: C1 only at the moment.");
-
     // Creating an initial CI vector
     cc_ = make_shared<Dvec>(det_, nstate_); // B runs first
 
@@ -337,8 +390,23 @@ void FCI::compute() {
   cc_ = make_shared<Dvec>(*cc);
   cc_->print(print_thresh_);
 
-  for (auto& iprop : properties_) {
-    iprop->compute(cc_);
-    iprop->print();
+  if (dipoles_) {
+    compute_rdm12();
+    cout << endl;
+    auto ocoeff = coeff_->slice(0, ncore_+norb_);
+    for (int i = 0; i != nstate_; ++i) {
+      stringstream ss; ss << "state " << i;
+      shared_ptr<const Matrix> mordm = rdm1(i)->rdm1_mat(ncore_);
+      Dipole dipole(geom_, make_shared<Matrix>(ocoeff * *mordm ^ ocoeff), ss.str());
+      dipole.compute();
+    }
+    for (int i = 0; i != nstate_; ++i)
+      for (int j = 0; j != i; ++j) {
+        stringstream ss; ss << "states " << i << " " << j;
+        compute_rdm12(i, j);
+        shared_ptr<const Matrix> mordm = rdm1(i,j)->rdm1_mat(ncore_, false);
+        Dipole dipole(geom_, make_shared<Matrix>(ocoeff * *mordm ^ ocoeff), ss.str());
+        dipole.compute();
+      }
   }
 }

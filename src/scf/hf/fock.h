@@ -1,5 +1,5 @@
 //
-// BAGEL - Parallel electron correlation program.
+// BAGEL - Brilliantly Advanced General Electronic Structure Library
 // Filename: fock.h
 // Copyright (C) 2012 Toru Shiozaki
 //
@@ -8,19 +8,18 @@
 //
 // This file is part of the BAGEL package.
 //
-// The BAGEL package is free software; you can redistribute it and/or modify
-// it under the terms of the GNU Library General Public License as published by
-// the Free Software Foundation; either version 3, or (at your option)
-// any later version.
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
 //
-// The BAGEL package is distributed in the hope that it will be useful,
+// This program is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-// GNU Library General Public License for more details.
+// GNU General Public License for more details.
 //
-// You should have received a copy of the GNU Library General Public License
-// along with the BAGEL package; see COPYING.  If not, write to
-// the Free Software Foundation, 675 Mass Ave, Cambridge, MA 02139, USA.
+// You should have received a copy of the GNU General Public License
+// along with this program.  If not, see <http://www.gnu.org/licenses/>.
 //
 
 
@@ -38,7 +37,7 @@ template<int DF>
 class Fock : public Fock_base {
   protected:
     void fock_two_electron_part(std::shared_ptr<const Matrix> den = nullptr);
-    void fock_two_electron_part_with_coeff(const MatView coeff, const bool rhf, const double scale_ex);
+    void fock_two_electron_part_with_coeff(const MatView coeff, const bool rhf, const double scale_ex, const double scale_coulomb);
 
     // when DF gradients are requested
     bool store_half_;
@@ -56,25 +55,28 @@ class Fock : public Fock_base {
     Fock() { }
     // Fock operator for DF cases
     template<int DF1 = DF, class = typename std::enable_if<DF1==1>::type>
-    Fock(const std::shared_ptr<const Geometry> a, const std::shared_ptr<const Matrix> prev, const std::shared_ptr<const Matrix> den,
-         const MatView ocoeff, const bool store = false, const bool rhf = false, const double scale_ex = 1.0)
+    Fock(std::shared_ptr<const Geometry> a, std::shared_ptr<const Matrix> prev, std::shared_ptr<const Matrix> den,
+         const MatView ocoeff, const bool store = false, const bool rhf = false, const double scale_ex = 1.0, const double scale_coulomb = 1.0)
      : Fock_base(a,prev,den), store_half_(store) {
-      fock_two_electron_part_with_coeff(ocoeff, rhf, scale_ex);
+      fock_two_electron_part_with_coeff(ocoeff, rhf, scale_ex, scale_coulomb);
       fock_one_electron_part();
     }
     // the same as above.
     template<typename T, class = typename std::enable_if<btas::is_boxtensor<T>::value>::type>
-    Fock(const std::shared_ptr<const Geometry> a, const std::shared_ptr<const Matrix> prev, const std::shared_ptr<const Matrix> den,
-         std::shared_ptr<T> ocoeff, const bool store = false, const bool rhf = false, const double scale_ex = 1.0) : Fock(a,prev,den,*ocoeff,store,rhf,scale_ex) { }
+    Fock(std::shared_ptr<const Geometry> a, std::shared_ptr<const Matrix> prev, std::shared_ptr<const Matrix> den,
+         std::shared_ptr<T> ocoeff, const bool store = false, const bool rhf = false, const double scale_ex = 1.0, const double scale_coulomb = 1.0)
+     : Fock(a,prev,den,*ocoeff,store,rhf,scale_ex,scale_coulomb) {
+    }
 
     // Fock operator
     template<int DF1 = DF, class = typename std::enable_if<DF1==1 or DF1==0>::type>
-    Fock(const std::shared_ptr<const Geometry> a, const std::shared_ptr<const Matrix> prev, const std::shared_ptr<const Matrix> den, const std::vector<double>& d)
-     : Fock(a,prev,den,den,d) {}
+    Fock(std::shared_ptr<const Geometry> a, std::shared_ptr<const Matrix> prev, std::shared_ptr<const Matrix> den, const std::vector<double>& d)
+     : Fock(a,prev,den,den,d) {
+    }
 
     // Fock operator with a different density matrix for exchange
     template<int DF1 = DF, class = typename std::enable_if<DF1==1 or DF1==0>::type>
-    Fock(const std::shared_ptr<const Geometry> a, const std::shared_ptr<const Matrix> prev, const std::shared_ptr<const Matrix> den, std::shared_ptr<const Matrix> ex, const std::vector<double>& d)
+    Fock(std::shared_ptr<const Geometry> a, std::shared_ptr<const Matrix> prev, std::shared_ptr<const Matrix> den, std::shared_ptr<const Matrix> ex, const std::vector<double>& d)
      : Fock_base(a,prev,den,d), store_half_(false) {
       fock_two_electron_part(ex);
       fock_one_electron_part();

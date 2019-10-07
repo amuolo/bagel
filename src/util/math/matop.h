@@ -1,5 +1,5 @@
 //
-// BAGEL - Parallel electron correlation program.
+// BAGEL - Brilliantly Advanced General Electronic Structure Library
 // Filename: matop.h
 // Copyright (C) 2014 Toru Shiozaki
 //
@@ -8,19 +8,18 @@
 //
 // This file is part of the BAGEL package.
 //
-// The BAGEL package is free software; you can redistribute it and/or modify
-// it under the terms of the GNU Library General Public License as published by
-// the Free Software Foundation; either version 3, or (at your option)
-// any later version.
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
 //
-// The BAGEL package is distributed in the hope that it will be useful,
+// This program is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-// GNU Library General Public License for more details.
+// GNU General Public License for more details.
 //
-// You should have received a copy of the GNU Library General Public License
-// along with the BAGEL package; see COPYING.  If not, write to
-// the Free Software Foundation, 675 Mass Ave, Cambridge, MA 02139, USA.
+// You should have received a copy of the GNU General Public License
+// along with this program.  If not, see <http://www.gnu.org/licenses/>.
 //
 
 #ifndef __SRC_MATH_MATOP_H
@@ -319,9 +318,7 @@ auto operator%(const T& a, const U& b) -> decltype(btas::dotc(a, b)) { return bt
 
 // operator * and % between Matrix and VectorB
 template <class T, class U,
-          class = typename std::enable_if<detail::is_mat<T>::value and detail::is_vec<U>::value
-                                      and std::is_same<typename std::remove_cv<typename T::value_type>::type, typename std::remove_cv<typename U::value_type>::type>::value
-                                         >::type
+          class = typename std::enable_if<(detail::is_mat<T>::value and detail::is_vec<U>::value) or (detail::is_zmat<T>::value and detail::is_zvec<U>::value)>::type
          >
 typename detail::returnable<U>::type operator*(const T& a, const U& b)  {
   typename detail::returnable<U>::type out(a.extent(0));
@@ -330,9 +327,7 @@ typename detail::returnable<U>::type operator*(const T& a, const U& b)  {
 }
 
 template <class T, class U,
-          class = typename std::enable_if<detail::is_mat<T>::value and detail::is_vec<U>::value
-                                      and std::is_same<typename std::remove_cv<typename T::value_type>::type, typename std::remove_cv<typename U::value_type>::type>::value
-                                         >::type
+          class = typename std::enable_if<(detail::is_mat<T>::value and detail::is_vec<U>::value) or (detail::is_zmat<T>::value and detail::is_zvec<U>::value)>::type
          >
 typename detail::returnable<U>::type operator%(const T& a, const U& b)  {
   typename detail::returnable<U>::type out(a.extent(1));
@@ -341,14 +336,11 @@ typename detail::returnable<U>::type operator%(const T& a, const U& b)  {
 }
 
 template <class T, class U,
-          class = typename std::enable_if<detail::is_mat<T>::value and detail::is_vec<U>::value
-                                      and std::is_same<typename std::remove_cv<typename T::value_type>::type, typename std::remove_cv<typename U::value_type>::type>::value
-                                         >::type
+          class = typename std::enable_if<(detail::is_mat<T>::value and detail::is_vec<U>::value) or (detail::is_zmat<T>::value and detail::is_zvec<U>::value)>::type
          >
 typename detail::returnable<U>::type operator%(const U& b, const T& a)  {
   auto out = a % b;
-  for (auto& i : out)
-    i = detail::conj(i);
+  conj_n(out.data(), out.size());
   return out;
 }
 

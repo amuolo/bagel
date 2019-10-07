@@ -1,0 +1,64 @@
+{ "bagel" : [
+
+{
+  "title" : "molecule",
+  "basis" : "svp",
+  "df_basis" : "svp-jkfit",
+  "angstrom" : "false",
+  "geometry" : [
+    { "atom" : "He", "xyz" : [     0.0000000000,    0.0000000000,   0.0000000000] },
+    { "atom" : "He", "xyz" : [     0.0000000000,    0.0000000000,   4.0000000000] },
+    { "atom" : "He", "xyz" : [     0.0000000000,    0.0000000000,   8.0000000000] }
+  ]
+},
+
+{
+  "title" : "hf"
+},
+
+{
+  "title" : "multisite",
+  "localization" : {
+    "region_sizes" : [1, 1, 1],
+    "max_iter" : 50,
+    "thresh" : 1.0e-12
+  }
+},
+
+{
+  "title" : "asd_dmrg",
+
+  "nsites" : 3,
+  "nstate" : 1,
+  "charge" : 0,
+  "nspin" : 0,
+  "active_sizes" : [5, 5, 5],
+  "active_electrons" : [2, 2, 2],
+  "region_sizes" : [1, 1, 1],
+
+  "active_orbitals" : [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15],
+  "localization" : {
+    "max_iter" : 50,
+    "thresh" : 1.0e-12
+  },
+
+  "ntrunc" : 13,
+  "thresh" : 1.0e-8,
+  "perturb" : 1.0e-3,
+  "perturb_thresh" : 1.0e-4,
+  "perturb_min" : 1.0e-4,
+  "maxiter" : 50,
+  
+  "ras" : {
+    "nguess" : 5,
+    "maxiter" : 50,
+    "thresh" : 1.0e-7
+  },
+  "spaces" : [ [ {"charge" : 0, "nspin" : 0, "nstate" : 1},
+                 {"charge" : 0, "nspin" : 2, "nstate" : 1},
+                 {"charge" : 1, "nspin" : 1, "nstate" : 1},
+                 {"charge" :-1, "nspin" : 1, "nstate" : 1} ] ],
+  "restricted" : [ { "orbitals" : [1, 0, 4], "max_holes" : 1, "max_particles" : 1 } ]
+}
+
+]}

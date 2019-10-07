@@ -1,5 +1,5 @@
 //
-// BAGEL - Parallel electron correlation program.
+// BAGEL - Brilliantly Advanced General Electronic Structure Library
 // Filename: extrap.h
 // Copyright (C) 2015 Toru Shiozaki
 //
@@ -8,19 +8,18 @@
 //
 // This file is part of the BAGEL package.
 //
-// The BAGEL package is free software; you can redistribute it and/or modify
-// it under the terms of the GNU Library General Public License as published by
-// the Free Software Foundation; either version 3, or (at your option)
-// any later version.
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
 //
-// The BAGEL package is distributed in the hope that it will be useful,
+// This program is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-// GNU Library General Public License for more details.
+// GNU General Public License for more details.
 //
-// You should have received a copy of the GNU Library General Public License
-// along with the BAGEL package; see COPYING.  If not, write to
-// the Free Software Foundation, 675 Mass Ave, Cambridge, MA 02139, USA.
+// You should have received a copy of the GNU General Public License
+// along with this program.  If not, see <http://www.gnu.org/licenses/>.
 //
 
 
@@ -93,10 +92,10 @@ class Amplitude {
     void ax_plus_y(const DataType& a, const Amplitude<DataType>& o) { amp_->ax_plus_y(a, o.amp_); left_->ax_plus_y(a, o.left_); }
     void ax_plus_y(const DataType& a, std::shared_ptr<const Amplitude<DataType>> o) { ax_plus_y(a, *o); }
 
-    DataType dot_product(const Amplitude<DataType>& o) const { return me_->dot_product_transpose(o.left_, amp_); }
+    DataType dot_product(const Amplitude<DataType>& o) const { return detail::conj(me_->dot_product_transpose(o.left_, amp_)); }
     DataType dot_product(std::shared_ptr<const Amplitude<DataType>> o) const { return dot_product(*o); }
 
-    DataType dot_product(const Residual<DataType>& o) const { return me_->dot_product_transpose(o.res_, amp_); }
+    DataType dot_product(const Residual<DataType>& o) const { return detail::conj(me_->dot_product_transpose(o.res_, amp_)); }
     DataType dot_product(std::shared_ptr<const Residual<DataType>> o) const { return dot_product(*o); }
 
     std::shared_ptr<const MultiTensor_<DataType>> tensor() const { return amp_; }
