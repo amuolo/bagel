@@ -1,26 +1,25 @@
 //
-// BAGEL - Parallel electron correlation program.
+// BAGEL - Brilliantly Advanced General Electronic Structure Library
 // Filename: rasd.cc
-// Copyright (C) 2014 Shane Parker
+// Copyright (C) 2014 Toru Shiozaki
 //
 // Author: Shane Parker <shane.parker@u.northwestern.edu>
-// Maintainer: NU theory
+// Maintainer: Shiozaki Group
 //
 // This file is part of the BAGEL package.
 //
-// The BAGEL package is free software; you can redistribute it and/or modify
-// it under the terms of the GNU Library General Public License as published by
-// the Free Software Foundation; either version 3, or (at your option)
-// any later version.
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
 //
-// The BAGEL package is distributed in the hope that it will be useful,
+// This program is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-// GNU Library General Public License for more details.
+// GNU General Public License for more details.
 //
-// You should have received a copy of the GNU Library General Public License
-// along with the BAGEL package; see COPYING.  If not, write to
-// the Free Software Foundation, 675 Mass Ave, Cambridge, MA 02139, USA.
+// You should have received a copy of the GNU General Public License
+// along with this program.  If not, see <http://www.gnu.org/licenses/>.
 //
 
 #include <src/asd/dmrg/rasd.h>
@@ -33,12 +32,10 @@
 #include <src/ci/ras/rasci.h>
 #include <src/util/muffle.h>
 
-//#define DEBUG
-
 using namespace std;
 using namespace bagel;
 
-RASD::RASD(const shared_ptr<const PTree> input, shared_ptr<MultiSite> multisite) : ASD_DMRG(input, multisite) { }
+RASD::RASD(const shared_ptr<const PTree> input, shared_ptr<const Reference> ref) : ASD_DMRG(input, ref) { }
 
 void RASD::read_restricted(shared_ptr<PTree> input, const int site) const {
   auto restricted = input_->get_child("restricted");
@@ -58,9 +55,6 @@ void RASD::read_restricted(shared_ptr<PTree> input, const int site) const {
       parent->push_back(tmp);
     }
     input->add_child("active", parent);
-#ifdef DEBUG
-    //cout << "RAS[" << nras[0] << "," << nras[1] << "," << nras[2] << "](" << input->get<int>("max_holes") << "h" << input->get<int>("max_particles") << "p)" << endl;
-#endif
   };
 
   if (restricted->size() == 1)
@@ -154,15 +148,17 @@ shared_ptr<DMRG_Block1> RASD::compute_first_block(vector<shared_ptr<PTree>> inpu
   bool append = false;
 
   for (auto& inp : inputs) {
-    // finish preparing the input
-    inp->put("nclosed", ref->nclosed());
-    read_restricted(inp, 0);
     const int spin = inp->get<int>("nspin");
     const int charge = inp->get<int>("charge");
-    {
+    { // prepare the input
+      inp->put("nclosed", ref->nclosed());
+      inp->put("extern_nactele", true);
+      inp->put("nactele", active_electrons_.at(0));
+      read_restricted(inp, 0);
+    }
+    { // RAS calculations
       Muffle hide_cout("asd_dmrg.log", append);
       append = true;
-      // RAS calculations
       auto ras = make_shared<RASCI>(inp, ref->geom(), ref);
       ras->compute();
       shared_ptr<const RASDvec> civecs = ras->civectors();
@@ -237,14 +233,17 @@ shared_ptr<DMRG_Block1> RASD::grow_block(vector<shared_ptr<PTree>> inputs, share
 
   Timer growtime(2);
   for (auto& inp : inputs) {
-    // finish preparing the input
     const int charge = inp->get<int>("charge");
     const int spin = inp->get<int>("nspin");
-    inp->put("nclosed", ref->nclosed());
-    read_restricted(inp, site);
-    {
+    { // prepare input
+      inp->put("nclosed", ref->nclosed());
+      inp->put("extern_nactele", true);
+      const int nactele = accumulate(active_electrons_.begin(), active_electrons_.begin()+site+1, 0);
+      inp->put("nactele", nactele);
+      read_restricted(inp, site);
+    }
+    { // ProductRAS calculations
       Muffle hide_cout("asd_dmrg.log", true);
-      // ProductRAS calculations
       auto prod_ras = make_shared<ProductRASCI>(inp, ref, left);
       prod_ras->compute();
       vector<shared_ptr<ProductRASCivec>> civecs = prod_ras->civectors();
@@ -304,9 +303,9 @@ shared_ptr<DMRG_Block1> RASD::grow_block(vector<shared_ptr<PTree>> inputs, share
   growtime.tick_print("orthonormalize and collect individual states");
 
   GammaForestProdASD forest(ortho_states);
-  growtime.tick_print("construct forest");
+  growtime.tick_print("construct GammaForestProdASD");
   forest.compute();
-  growtime.tick_print("renormalize states");
+  growtime.tick_print("compute forest");
 
   shared_ptr<Matrix> coeff = ref->coeff()->slice_copy(ref->nclosed(), ref->nclosed()+ref->nact())->merge(left->coeff());
   auto out = make_shared<DMRG_Block1>(move(forest), hmap, spinmap, coeff);
@@ -317,12 +316,15 @@ shared_ptr<DMRG_Block1> RASD::grow_block(vector<shared_ptr<PTree>> inputs, share
 
 shared_ptr<DMRG_Block1> RASD::decimate_block(shared_ptr<PTree> input, shared_ptr<const Reference> ref, shared_ptr<DMRG_Block1> system, shared_ptr<DMRG_Block1> environment, const int site) {
   Timer decimatetime(2);
-  // assume the input is already fully formed, this may be revisited later
-  input->put("nclosed", ref->nclosed());
-  read_restricted(input, site);
-  {
+  { // prepare input
+    input->put("nclosed", ref->nclosed());
+    input->put("extern_nactele", true);
+    const int nactele = accumulate(active_electrons_.begin(), active_electrons_.end(), input->get<int>("charge"));
+    input->put("nactele", nactele);
+    read_restricted(input, site);
+  }
+  { // ProductRAS calculations
     Muffle hide_cout("asd_dmrg.log", true);
-    // ProductRAS calculations
     if (!system) {
       auto prod_ras = make_shared<ProductRASCI>(input, ref, environment);
       prod_ras->compute();
@@ -347,7 +349,7 @@ shared_ptr<DMRG_Block1> RASD::decimate_block(shared_ptr<PTree> input, shared_ptr
       decimatetime.tick_print("construct GammaForestASD");
 
       forest.compute();
-      decimatetime.tick_print("renormalize");
+      decimatetime.tick_print("compute forest");
 
       auto out = make_shared<DMRG_Block1>(move(forest), hmap, spinmap, ref->coeff()->slice_copy(ref->nclosed(), ref->nclosed()+ref->nact()));
       decimatetime.tick_print("dmrg block");
@@ -437,7 +439,7 @@ map<BlockKey, shared_ptr<const RASDvec>> RASD::diagonalize_site_RDM(const vector
         if ((nele_block*nele_ci)%2==1) {
           auto tmp = isec.second->copy();
           tmp->scale(-1.0);
-          outer_products[isec.first].emplace_back(weights_[ist], isec.second);
+          outer_products[isec.first].emplace_back(weights_[ist], tmp);
         }
         else {
           outer_products[isec.first].emplace_back(weights_[ist], isec.second);
@@ -564,29 +566,11 @@ map<BlockKey, shared_ptr<const RASDvec>> RASD::diagonalize_site_RDM(const vector
   // Process into Dvecs: These vectors will become blocks so now BlockKey should be a descriptor of the block vector
   map<BlockKey, shared_ptr<const RASDvec>> out;
   cout << "  o Renormalized blocks have" << endl;
-#ifdef DEBUG
-  resources__->proc()->cout_on();
-#endif
   for (auto& dvec : output_vectors) {
     auto tmp = make_shared<RASDvec>(dvec.second);
-
-#ifdef DEBUG
-    for (int i = 0; i < mpi__->size(); ++i) {
-      if (i == mpi__->rank()) {
-        cout << "    === rank " << i << " ===" << endl;
-#endif
-        cout << "    + " << tmp->ij() << " states with (" << tmp->det()->nelea() << ", " << tmp->det()->neleb() << ")" << endl;
-#ifdef DEBUG
-      }
-      mpi__->barrier();
-      this_thread::sleep_for(sleeptime__);
-    }
-#endif
+    cout << "    + " << tmp->ij() << " states with (" << tmp->det()->nelea() << ", " << tmp->det()->neleb() << ")" << endl;
     out.emplace(BlockKey(tmp->det()->nelea(), tmp->det()->neleb()), tmp);
   }
-#ifdef DEBUG
-  resources__->proc()->cout_off();
-#endif
 
   return out;
 }
@@ -613,7 +597,7 @@ void RASD::apply_perturbation(shared_ptr<const RASBlockVectors> cc, vector<Gamma
   else {
     const int na = sdet->nelea() + dele.first;
     const int nb = sdet->neleb() + dele.second;
-    if (na >= 0 && na < sdet->norb() && nb >= 0 && nb < sdet->norb()) {
+    if (na >= 0 && na <= sdet->norb() && nb >= 0 && nb <= sdet->norb()) {
       tdet = sdet->clone(na, nb);
       detmap[Tkey] = tdet;
     }
@@ -759,12 +743,13 @@ map<BlockKey, vector<shared_ptr<ProductRASCivec>>> RASD::diagonalize_site_and_bl
 #endif
 
     Matrix orthonormalize(*overlap.tildex(1.0e-11));
-#ifdef HAVE_MPI_H
-    orthonormalize.synchronize();
-#endif
-    rdmtime.tick_print("ortho built");
 
     if (orthonormalize.mdim() > 0) {
+#ifdef HAVE_MPI_H
+      orthonormalize.synchronize();
+#endif
+      rdmtime.tick_print("ortho built");
+
       auto best_states = make_shared<Matrix>(orthonormalize % rdm * orthonormalize);
 #ifdef HAVE_MPI_H
       best_states->synchronize();
@@ -808,26 +793,8 @@ map<BlockKey, vector<shared_ptr<ProductRASCivec>>> RASD::diagonalize_site_and_bl
   }
 
   cout << "  o Renormalized blocks have" << endl;
-#ifdef DEBUG
-  resources__->proc()->cout_on();
-#endif
-  for (auto& o : out) {
-#ifdef DEBUG
-    for (int i = 0; i < mpi__->size(); ++i) {
-      if (i == mpi__->rank()) {
-        cout << "      === rank " << i << " ===" << endl;
-#endif
-        cout << "    + " << o.second.size() << " states with (" << o.first.nelea << ", " << o.first.neleb << ")" << endl;
-#ifdef DEBUG
-      }
-      mpi__->barrier();
-      this_thread::sleep_for(sleeptime__);
-    }
-#endif
-  }
-#ifdef DEBUG
-  resources__->proc()->cout_off();
-#endif
+  for (auto& o : out)
+    cout << "    + " << o.second.size() << " states with (" << o.first.nelea << ", " << o.first.neleb << ")" << endl;
 
   const double total_trace = accumulate(singular_values.begin(), singular_values.end(), 0.0,
                                           [] (double x, pair<double, tuple<BlockKey, int>> s) { return x + s.first; } );

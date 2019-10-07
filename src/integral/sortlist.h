@@ -1,5 +1,5 @@
 //
-// BAGEL - Parallel electron correlation program.
+// BAGEL - Brilliantly Advanced General Electronic Structure Library
 // Filename: sortlist.h
 // Copyright (C) 2009 Toru Shiozaki
 //
@@ -8,19 +8,18 @@
 //
 // This file is part of the BAGEL package.
 //
-// The BAGEL package is free software; you can redistribute it and/or modify
-// it under the terms of the GNU Library General Public License as published by
-// the Free Software Foundation; either version 3, or (at your option)
-// any later version.
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
 //
-// The BAGEL package is distributed in the hope that it will be useful,
+// This program is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-// GNU Library General Public License for more details.
+// GNU General Public License for more details.
 //
-// You should have received a copy of the GNU Library General Public License
-// along with the BAGEL package; see COPYING.  If not, write to
-// the Free Software Foundation, 675 Mass Ave, Cambridge, MA 02139, USA.
+// You should have received a copy of the GNU General Public License
+// along with this program.  If not, see <http://www.gnu.org/licenses/>.
 //
 
 //
@@ -68,6 +67,16 @@ struct SortList {
   static void sort_indices_55(double*, const double*, const int, const int, const int, const bool);
   static void sort_indices_56(double*, const double*, const int, const int, const int, const bool);
   static void sort_indices_66(double*, const double*, const int, const int, const int, const bool);
+#ifdef COMPILE_J_ORB
+  static void sort_indices_07(double*, const double*, const int, const int, const int, const bool);
+  static void sort_indices_17(double*, const double*, const int, const int, const int, const bool);
+  static void sort_indices_27(double*, const double*, const int, const int, const int, const bool);
+  static void sort_indices_37(double*, const double*, const int, const int, const int, const bool);
+  static void sort_indices_47(double*, const double*, const int, const int, const int, const bool);
+  static void sort_indices_57(double*, const double*, const int, const int, const int, const bool);
+  static void sort_indices_67(double*, const double*, const int, const int, const int, const bool);
+  static void sort_indices_77(double*, const double*, const int, const int, const int, const bool);
+#endif
 
   static void sort_indices_00_sph(double*, const double*, const int, const int, const int, const bool);
   static void sort_indices_01_sph(double*, const double*, const int, const int, const int, const bool);
@@ -97,6 +106,16 @@ struct SortList {
   static void sort_indices_55_sph(double*, const double*, const int, const int, const int, const bool);
   static void sort_indices_56_sph(double*, const double*, const int, const int, const int, const bool);
   static void sort_indices_66_sph(double*, const double*, const int, const int, const int, const bool);
+#ifdef COMPILE_J_ORB
+  static void sort_indices_07_sph(double*, const double*, const int, const int, const int, const bool);
+  static void sort_indices_17_sph(double*, const double*, const int, const int, const int, const bool);
+  static void sort_indices_27_sph(double*, const double*, const int, const int, const int, const bool);
+  static void sort_indices_37_sph(double*, const double*, const int, const int, const int, const bool);
+  static void sort_indices_47_sph(double*, const double*, const int, const int, const int, const bool);
+  static void sort_indices_57_sph(double*, const double*, const int, const int, const int, const bool);
+  static void sort_indices_67_sph(double*, const double*, const int, const int, const int, const bool);
+  static void sort_indices_77_sph(double*, const double*, const int, const int, const int, const bool);
+#endif
 
   void sortfunc_call(const unsigned int i, double* a1, const double* a2, const int a3, const int a4, const int a5, const bool a6) const {
     return (sortfunc[i])(a1, a2, a3, a4, a5, a6);
@@ -137,6 +156,16 @@ struct CSortList {
   static void sort_indices_55(std::complex<double>*, const std::complex<double>*, const int, const int, const int, const bool);
   static void sort_indices_56(std::complex<double>*, const std::complex<double>*, const int, const int, const int, const bool);
   static void sort_indices_66(std::complex<double>*, const std::complex<double>*, const int, const int, const int, const bool);
+#ifdef COMPILE_J_ORB
+  static void sort_indices_07(std::complex<double>*, const std::complex<double>*, const int, const int, const int, const bool);
+  static void sort_indices_17(std::complex<double>*, const std::complex<double>*, const int, const int, const int, const bool);
+  static void sort_indices_27(std::complex<double>*, const std::complex<double>*, const int, const int, const int, const bool);
+  static void sort_indices_37(std::complex<double>*, const std::complex<double>*, const int, const int, const int, const bool);
+  static void sort_indices_47(std::complex<double>*, const std::complex<double>*, const int, const int, const int, const bool);
+  static void sort_indices_57(std::complex<double>*, const std::complex<double>*, const int, const int, const int, const bool);
+  static void sort_indices_67(std::complex<double>*, const std::complex<double>*, const int, const int, const int, const bool);
+  static void sort_indices_77(std::complex<double>*, const std::complex<double>*, const int, const int, const int, const bool);
+#endif
 
   static void sort_indices_00_sph(std::complex<double>*, const std::complex<double>*, const int, const int, const int, const bool);
   static void sort_indices_01_sph(std::complex<double>*, const std::complex<double>*, const int, const int, const int, const bool);
@@ -166,6 +195,16 @@ struct CSortList {
   static void sort_indices_55_sph(std::complex<double>*, const std::complex<double>*, const int, const int, const int, const bool);
   static void sort_indices_56_sph(std::complex<double>*, const std::complex<double>*, const int, const int, const int, const bool);
   static void sort_indices_66_sph(std::complex<double>*, const std::complex<double>*, const int, const int, const int, const bool);
+#ifdef COMPILE_J_ORB
+  static void sort_indices_07_sph(std::complex<double>*, const std::complex<double>*, const int, const int, const int, const bool);
+  static void sort_indices_17_sph(std::complex<double>*, const std::complex<double>*, const int, const int, const int, const bool);
+  static void sort_indices_27_sph(std::complex<double>*, const std::complex<double>*, const int, const int, const int, const bool);
+  static void sort_indices_37_sph(std::complex<double>*, const std::complex<double>*, const int, const int, const int, const bool);
+  static void sort_indices_47_sph(std::complex<double>*, const std::complex<double>*, const int, const int, const int, const bool);
+  static void sort_indices_57_sph(std::complex<double>*, const std::complex<double>*, const int, const int, const int, const bool);
+  static void sort_indices_67_sph(std::complex<double>*, const std::complex<double>*, const int, const int, const int, const bool);
+  static void sort_indices_77_sph(std::complex<double>*, const std::complex<double>*, const int, const int, const int, const bool);
+#endif
 
   void sortfunc_call(const unsigned int i, std::complex<double>* a1, const std::complex<double>* a2, const int a3, const int a4, const int a5, const bool a6) const {
     return (sortfunc[i])(a1, a2, a3, a4, a5, a6);

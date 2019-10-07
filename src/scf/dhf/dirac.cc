@@ -1,5 +1,5 @@
 //
-// BAGEL - Parallel electron correlation program.
+// BAGEL - Brilliantly Advanced General Electronic Structure Library
 // Filename: dirac.cc
 // Copyright (C) 2012 Toru Shiozaki
 //
@@ -8,19 +8,18 @@
 //
 // This file is part of the BAGEL package.
 //
-// The BAGEL package is free software; you can redistribute it and/or modify
-// it under the terms of the GNU Library General Public License as published by
-// the Free Software Foundation; either version 3, or (at your option)
-// any later version.
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
 //
-// The BAGEL package is distributed in the hope that it will be useful,
+// This program is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-// GNU Library General Public License for more details.
+// GNU General Public License for more details.
 //
-// You should have received a copy of the GNU Library General Public License
-// along with the BAGEL package; see COPYING.  If not, write to
-// the Free Software Foundation, 675 Mass Ave, Cambridge, MA 02139, USA.
+// You should have received a copy of the GNU General Public License
+// along with this program.  If not, see <http://www.gnu.org/licenses/>.
 //
 
 
@@ -28,14 +27,17 @@
 #include <src/scf/dhf/dfock.h>
 #include <src/mat1e/rel/relhcore.h>
 #include <src/mat1e/rel/reloverlap.h>
+#include <src/mat1e/rel/reldipole.h>
 #include <src/mat1e/giao/relhcore_london.h>
 #include <src/mat1e/giao/reloverlap_london.h>
+#include <src/wfn/zreference.h>
 #include <src/wfn/relreference.h>
 #include <src/util/constants.h>
 #include <src/util/math/zmatrix.h>
 #include <src/util/math/matrix.h>
 #include <src/util/math/diis.h>
 #include <src/util/muffle.h>
+#include <src/util/io/dfpcmo.h>
 #include <src/scf/dhf/population_analysis.h>
 
 using namespace std;
@@ -48,8 +50,11 @@ Dirac::Dirac(const shared_ptr<const PTree> idata, const shared_ptr<const Geometr
   robust_ = idata->get<bool>("robust", false);
 
   // when computing gradient, we store half-transform integrals
-  do_grad_ = idata->get<bool>("gradient", false);
+  do_grad_ = idata->get<bool>("_gradient", false);
   if (do_grad_ && geom_->magnetism()) throw runtime_error("Gradient integrals have not been implemented for a GIAO basis.");
+
+  // MO printout option
+  dfpcmo_ = idata->get<bool>("dfpcmo", false);
 
   geom_ = geom->relativistic(gaunt_);
   common_init(idata);
@@ -69,6 +74,18 @@ void Dirac::common_init(const shared_ptr<const PTree> idata) {
   thresh_overlap_ = idata_->get<double>("thresh_overlap", 1.0e-8);
   ncharge_ = idata->get<int>("charge", 0);
   nele_ = geom_->nele()-ncharge_;
+
+  // whether or not to throw if the calculation does not converge
+  conv_ignore_ = idata_->get<bool>("conv_ignore", false);
+
+  if (nele_ % 2 != 0) {
+    if (geom_->nonzero_magnetic_field())
+      cout << "   ***  Dirac--Hartree--Fock is not recommended for odd electron counts.  State-averaged CASSCF can better handle near-degeneracies.  ***" << endl;
+    else
+      throw runtime_error("Dirac--Hartree--Fock should not be used for odd electron counts, due to ground state degeneracy.  State-averaged CASSCF is recommended.");
+  }
+
+  multipole_print_ = idata->get<int>("multipole", 1);
 
   if (!geom_->magnetism()) {
     hcore_ = make_shared<const RelHcore>(geom_);
@@ -114,20 +131,12 @@ void Dirac::compute() {
     Timer ptime(1);
 
     auto fock = make_shared<DFock>(geom_, hcore_, coeff->matrix()->slice_copy(nneg_, nele_+nneg_), gaunt_, breit_, do_grad_, robust_);
-
-// TODO I have a feeling that the code should not need this, but sometimes there are slight errors. still looking on it.
-#if 0
-    assert(fock->is_hermitian());
-    fock->hermite();
-#endif
-    // distribute
     shared_ptr<const DistZMatrix> distfock = fock->distmatrix();
 
     // compute energy here
     const complex<double> prod = aodensity->dot_product(*hcore+*distfock); // identical to Tr(D^+ F)
     if (fabs(prod.imag()) > 1.0e-12) {
       stringstream ss; ss << "imaginary part of energy is nonzero!! Perhaps Fock is not Hermite for some reasons " << setprecision(10) << prod.imag();
-//    throw runtime_error(ss.str());
       cout << ss.str() << endl;
     }
     energy_ = 0.5*prod.real() + geom_->nuclear_repulsion();
@@ -142,11 +151,21 @@ void Dirac::compute() {
     if (error < thresh_scf_ && iter > 0) {
       cout << indent << endl << indent << "  * SCF iteration converged." << endl << endl;
       // when computing gradient, we store half-transform integrals to avoid recomputation
-      if (do_grad_) half_ = fock->half();
+      if (do_grad_) {
+        assert(!gaunt_);
+        half_ = fock->half_coulomb();
+      }
+      if (dfpcmo_) {
+        shared_ptr<const ZMatrix> scoeff = coeff->matrix();
+        DFPCMO dfpcmo(scoeff, make_shared<VectorB>(eig_), energy_, scoeff->mdim()-nneg_, nneg_, scoeff->ndim());
+        dfpcmo.print();
+      }
       break;
     } else if (iter == max_iter_-1) {
-      cout << indent << endl << indent << "  * Max iteration reached in SCF." << endl << endl;
-      throw runtime_error("Max iteration reached in Dirac--Fock SCF");
+      if (!conv_ignore_)
+        throw runtime_error("Max iteration reached in Dirac--Hartree--Fock SCF");
+      else
+        cout << endl << indent << "  * Max iteration reached in Dirac--Hartree--Fock SCF.  Convergence not reached! *   " << endl << endl;
     }
 
     if (iter >= diis_start_) {
@@ -164,11 +183,23 @@ void Dirac::compute() {
 
   coeff_ = coeff->matrix();
 
+  if (!geom_->external() && !geom_->magnetism() && multipole_print_) {
+    if (multipole_print_ > 1)
+      cout << "    * Higher order multipoles are not implemented with Dirac Hartree-Fock." << endl;
+    auto den = aodensity->matrix();
+    RelDipole mu(geom_, den, "Dirac Hartree-Fock");
+    mu.compute();
+  }
+
   // print out orbital populations, if needed
   if (idata_->get<bool>("pop", false)) {
-    cout << "    * Printing out population analysis to dhf.log" << endl;
-    Muffle muf ("dhf.log");
-    population_analysis(geom_, coeff_->slice(nneg_, nneg_*2), overlap_, (geom_->magnetism() ? 0 : 1));
+    if (!geom_->magnetism()) {
+      cout << "    * Printing out population analysis to dhf.log" << endl;
+      Muffle muf ("dhf.log");
+      population_analysis(geom_, coeff_->slice(nneg_, nneg_*2), overlap_);
+    } else {
+      cout << "    * Population analysis is currently disabled when external magnetic fields are applied" << endl;
+    }
   }
 
 }
@@ -184,17 +215,28 @@ void Dirac::print_eig() const {
 shared_ptr<const Reference> Dirac::conv_to_ref() const {
   // we store only positive state coefficients
   const size_t npos = coeff_->mdim() - nneg_;
+  assert(npos % 2 == 0);
   // coeff is occ, virt, nneg
-  shared_ptr<ZMatrix> c = coeff_->clone();
-  c->copy_block(0, 0, c->ndim(), npos, coeff_->slice(nneg_, nneg_+npos));
-  c->copy_block(0, npos, c->ndim(), nneg_, coeff_->slice(0, nneg_));
-  auto out = make_shared<RelReference>(geom_, c, energy_, nneg_, nele_, 0, npos-nele_, gaunt_, breit_);
+  auto c = make_shared<ZCoeff_Striped>(*coeff_, nele_/2, nele_%2, (npos-nele_)/2, nneg_, /*move_neg*/true);
+  auto out = make_shared<RelReference>(geom_, c, energy_, nneg_, nele_/2, nele_%2, (npos-nele_)/2, gaunt_, breit_);
+
+  // assuming closed-shell
   vector<double> eigp(eig_.begin()+nneg_, eig_.end());
   vector<double> eigm(eig_.begin(), eig_.begin()+nneg_);
-  VectorB eig(eig_.size());
-  copy(eigp.begin(), eigp.end(), eig.begin());
-  copy(eigm.begin(), eigm.end(), eig.begin()+eigp.size());
+  eigp.insert(eigp.end(), eigm.begin(), eigm.end());
+  VectorB eig(eig_.size()/2);
+  VectorB eigB(eig_.size()/2);
+  for (int i = 0; i != eig_.size()/2; ++i) {
+    eig[i] = eigp[i*2]; 
+    eigB[i] = eigp[i*2+1]; 
+  }
   out->set_eig(eig);
+  out->set_eigB(eigB);
+
+  VectorB occup(eig.size());
+  fill_n(occup.data(), nele_/2, 1.0);
+  out->set_occup(occup);
+  out->set_occupB(occup);
   return out;
 }
 
@@ -211,29 +253,27 @@ shared_ptr<const DistZMatrix> Dirac::initial_guess(const shared_ptr<const DistZM
     coeff = make_shared<const DistZMatrix>(*s12 * interm);
 
   } else if (dynamic_pointer_cast<const RelReference>(ref_)) {
+    // Relativistic (4-component) reference
     auto relref = dynamic_pointer_cast<const RelReference>(ref_);
+    shared_ptr<ZMatrix> fock = make_shared<DFock>(geom_, hcore_, relref->relcoeff()->slice_copy(0, nele_), gaunt_, breit_, /*store_half*/false, robust_);
+    DistZMatrix interm = *s12 % *fock->distmatrix() * *s12;
+    interm.diagonalize(eig);
+    coeff = make_shared<const DistZMatrix>(*s12 * interm);
 
-    if (relref->rel()) {
-      // Relativistic (4-component) reference
-      shared_ptr<ZMatrix> fock = make_shared<DFock>(geom_, hcore_, relref->relcoeff()->slice_copy(0, nele_), gaunt_, breit_, /*store_half*/false, robust_);
-      DistZMatrix interm = *s12 % *fock->distmatrix() * *s12;
-      interm.diagonalize(eig);
-      coeff = make_shared<const DistZMatrix>(*s12 * interm);
-    } else {
-      // Non-relativistic, GIAO-based reference
-      const string typeinfo = geom_->london() ? "GIAO" : "(common origin)";
-      assert(geom_->magnetism());
-      const int nocc = ref_->nocc();
-      shared_ptr<ZMatrix> fock;
-      assert(nocc*2 == nele_);
-      auto ocoeff = make_shared<ZMatrix>(n*4, 2*nocc);
-      ocoeff->add_block(1.0, 0,    0, n, nocc, relref->relcoeff()->slice(0,nocc));
-      ocoeff->add_block(1.0, n, nocc, n, nocc, relref->relcoeff()->slice(0,nocc));
-      fock = make_shared<DFock>(geom_, hcore_, ocoeff, gaunt_, breit_, /*store_half*/false, robust_);
-      DistZMatrix interm = *s12 % *fock->distmatrix() * *s12;
-      interm.diagonalize(eig);
-      coeff = make_shared<const DistZMatrix>(*s12 * interm);
-    }
+  } else if (dynamic_pointer_cast<const ZReference>(ref_)) {
+    // Non-relativistic, GIAO-based reference
+    auto zref = dynamic_pointer_cast<const ZReference>(ref_);
+    assert(geom_->magnetism());
+    const int nocc = ref_->nocc();
+    assert(nocc*2 == nele_);
+    auto ocoeff = make_shared<ZMatrix>(n*4, 2*nocc);
+    ocoeff->add_block(1.0, 0,    0, n, nocc, zref->zcoeff()->slice(0,nocc));
+    ocoeff->add_block(1.0, n, nocc, n, nocc, zref->zcoeff()->slice(0,nocc));
+    auto fock = make_shared<DFock>(geom_, hcore_, ocoeff, gaunt_, breit_, /*store_half*/false, robust_);
+    DistZMatrix interm = *s12 % *fock->distmatrix() * *s12;
+    interm.diagonalize(eig);
+    coeff = make_shared<const DistZMatrix>(*s12 * interm);
+
   } else if (ref_->coeff()->ndim() == n) {
     // Non-relativistic, real reference
     assert(!geom_->magnetism());

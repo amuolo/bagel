@@ -1,5 +1,5 @@
 //
-// BAGEL - Parallel electron correlation program.
+// BAGEL - Brilliantly Advanced General Electronic Structure Library
 // Filename: dftgrid.cc
 // Copyright (C) 2013 Toru Shiozaki
 //
@@ -8,19 +8,18 @@
 //
 // This file is part of the BAGEL package.
 //
-// The BAGEL package is free software; you can redistribute it and/or modify
-// it under the terms of the GNU Library General Public License as published by
-// the Free Software Foundation; either version 3, or (at your option)
-// any later version.
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
 //
-// The BAGEL package is distributed in the hope that it will be useful,
+// This program is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-// GNU Library General Public License for more details.
+// GNU General Public License for more details.
 //
-// You should have received a copy of the GNU Library General Public License
-// along with the BAGEL package; see COPYING.  If not, write to
-// the Free Software Foundation, 675 Mass Ave, Cambridge, MA 02139, USA.
+// You should have received a copy of the GNU General Public License
+// along with this program.  If not, see <http://www.gnu.org/licenses/>.
 //
 
 #include <numeric>
@@ -29,6 +28,9 @@
 #include <src/scf/ks/xcfunc.h>
 #include <src/util/f77.h>
 #include <src/util/constants.h>
+#include <src/util/taskqueue.h>
+#include <src/util/timer.h>
+#include <src/util/parallel/staticdist.h>
 #include <src/util/parallel/mpi_interface.h>
 
 using namespace std;
@@ -134,10 +136,10 @@ tuple<shared_ptr<const Matrix>,double> DFTGrid_base::compute_xc(shared_ptr<const
   tasks.compute();
   time.tick_print("exc+vxc");
 
-  auto out = make_shared<Matrix>(geom_->nbasis(), geom_->nbasis());
+  auto out = make_shared<Matrix>(mol_->nbasis(), mol_->nbasis());
   double en = 0.0;
 
-  auto scal = make_shared<Matrix>(geom_->nbasis(), grid_->size());
+  auto scal = make_shared<Matrix>(mol_->nbasis(), grid_->size());
   if (func->lda()) {
     for (size_t i = 0; i != scal->mdim(); ++i) {
       daxpy_(scal->ndim(), vxc[i]*grid_->weight(i), grid_->basis()->element_ptr(0, i), 1, scal->element_ptr(0, i), 1);
@@ -161,7 +163,7 @@ tuple<shared_ptr<const Matrix>,double> DFTGrid_base::compute_xc(shared_ptr<const
 
 
 shared_ptr<const GradFile> DFTGrid_base::compute_xcgrad(shared_ptr<const XCFunc> func, shared_ptr<const Matrix> mat) const {
-  auto out = make_shared<GradFile>(geom_->natom());
+  auto out = make_shared<GradFile>(mol_->natom());
 
   unique_ptr<double[]> rho(new double[grid_->size()]);
   unique_ptr<double[]> sigma, rhox, rhoy, rhoz;
@@ -194,7 +196,7 @@ shared_ptr<const GradFile> DFTGrid_base::compute_xcgrad(shared_ptr<const XCFunc>
   // loop over target atom
   size_t offset = 0;
   int n = 0;
-  for (auto& b : geom_->atoms()) {
+  for (auto& b : mol_->atoms()) {
     shared_ptr<const Matrix> bmat = mat->cut(offset, offset+b->nbasis());
     array<shared_ptr<const Matrix>,3> d1mat;
     d1mat[0] = make_shared<const Matrix>(*bmat % *grid_->gradx()->cut(offset, offset+b->nbasis()));
@@ -257,14 +259,14 @@ constexpr double a_stratmann__ = 0.64;
 double DFTGrid_base::fuzzy_cell(shared_ptr<const Atom> atom, array<double,3>&& xyz) const {
   int fuzzy = -1;
   shared_ptr<StackMem> stack = resources__->get();
-  double* const total = stack->get(geom_->natom());
-  fill_n(total, geom_->natom(), 1.0);
+  double* const total = stack->get(mol_->natom());
+  fill_n(total, mol_->natom(), 1.0);
 
   int i = 0;
-  for (auto b = geom_->atoms().begin(); b != geom_->atoms().end(); ++b, ++i) {
+  for (auto b = mol_->atoms().begin(); b != mol_->atoms().end(); ++b, ++i) {
     const double distbg = (*b)->distance(xyz);
     int j = i+1;
-    for (auto c = b+1; c != geom_->atoms().end(); ++c, ++j) {
+    for (auto c = b+1; c != mol_->atoms().end(); ++c, ++j) {
       const double distbc = (*b)->distance(*c);
       const double distcg = (*c)->distance(xyz);
       // Stratmann CPL 1996
@@ -281,8 +283,8 @@ double DFTGrid_base::fuzzy_cell(shared_ptr<const Atom> atom, array<double,3>&& x
   if (fuzzy == -1)
     throw runtime_error("grid and atoms do not match with each other");
 
-  const double out = total[fuzzy] / accumulate(total, total+geom_->natom(), 0.0); // Eq. 22
-  stack->release(geom_->natom(), total);
+  const double out = total[fuzzy] / accumulate(total, total+mol_->natom(), 0.0); // Eq. 22
+  stack->release(mol_->natom(), total);
   resources__->release(stack);
   return out;
 }
@@ -291,8 +293,8 @@ double DFTGrid_base::fuzzy_cell(shared_ptr<const Atom> atom, array<double,3>&& x
 namespace bagel {
 class FuzzyTask {
   protected:
-    std::shared_ptr<Matrix> data;
-    std::shared_ptr<const Atom> atom;
+    shared_ptr<Matrix> data;
+    shared_ptr<const Atom> atom;
     double xg;
     double yg;
     double zg;
@@ -300,7 +302,7 @@ class FuzzyTask {
     DFTGrid_base* parent;
     const int n;
   public:
-    FuzzyTask(std::shared_ptr<Matrix> d, std::shared_ptr<const Atom> a, double x, double y, double z, double c, DFTGrid_base* ptr, const int i)
+    FuzzyTask(shared_ptr<Matrix> d, shared_ptr<const Atom> a, double x, double y, double z, double c, DFTGrid_base* ptr, const int i)
      : data(d), atom(a), xg(x), yg(y), zg(z), coeff(c), parent(ptr), n(i) { }
 
     void compute() {
@@ -321,18 +323,18 @@ void DFTGrid_base::add_grid(const int nrad, const int nang, const unique_ptr<dou
   const int ngrid = nrad*nang;
   const int nprev = grid_ ? grid_->size() : 0;
 
-  auto combined = make_shared<Matrix>(4, nprev+ngrid*geom_->natom());
+  auto combined = make_shared<Matrix>(4, nprev+ngrid*mol_->natom());
   if (nprev)
     copy_n(grid_->data()->data(), 4*nprev, combined->data());
 
-  TaskQueue<FuzzyTask> tasks(geom_->natom()*nrad*nang);
+  TaskQueue<FuzzyTask> tasks(mol_->natom()*nrad*nang);
 
   int cnt = nprev;
-  for (auto& a : geom_->atoms()) {
+  for (auto& a : mol_->atoms()) {
     const double rbs = a->radius();
 
     double rib = 1.0e+10;
-    for (auto& b : geom_->atoms())
+    for (auto& b : mol_->atoms())
       if (a != b)
         rib = min(rib, a->distance(b));
 
@@ -362,7 +364,7 @@ void DFTGrid_base::add_grid(const int nrad, const int nang, const unique_ptr<dou
   tasks.compute();
 
   shared_ptr<const Matrix> o = combined;
-  grid_ = make_shared<Grid>(geom_, o);
+  grid_ = make_shared<Grid>(mol_, o);
 
 }
 
@@ -383,14 +385,14 @@ void DFTGrid_base::remove_redgrid() {
       copy_n(grid_->data()->element_ptr(0, i), 4, out->element_ptr(0,size++));
 
   shared_ptr<const Matrix> o = out;
-  grid_ = make_shared<Grid>(geom_, o);
+  grid_ = make_shared<Grid>(mol_, o);
 
   cout <<  "    * Grid points: " << size << endl << endl;
 }
 
 
 // grid without 'pruning'. Becke's original mapping
-BLGrid::BLGrid(const size_t nrad, const size_t nang, shared_ptr<const Geometry> geom) : DFTGrid_base(geom) {
+BLGrid::BLGrid(const size_t nrad, const size_t nang, shared_ptr<const Molecule> mol) : DFTGrid_base(mol) {
   // construct Lebedev grid
   unique_ptr<double[]> x(new double[nang]);
   unique_ptr<double[]> y(new double[nang]);
@@ -415,7 +417,7 @@ BLGrid::BLGrid(const size_t nrad, const size_t nang, shared_ptr<const Geometry> 
 }
 
 
-TALGrid::TALGrid(const size_t nrad, const size_t nang, shared_ptr<const Geometry> geom) : DFTGrid_base(geom) {
+TALGrid::TALGrid(const size_t nrad, const size_t nang, shared_ptr<const Molecule> mol) : DFTGrid_base(mol) {
   // construct Lebedev grid
   unique_ptr<double[]> x(new double[nang]);
   unique_ptr<double[]> y(new double[nang]);
@@ -440,7 +442,7 @@ TALGrid::TALGrid(const size_t nrad, const size_t nang, shared_ptr<const Geometry
 }
 
 
-DefaultGrid::DefaultGrid(shared_ptr<const Geometry> geom) : DFTGrid_base(geom) {
+DefaultGrid::DefaultGrid(shared_ptr<const Molecule> mol) : DFTGrid_base(mol) {
   // the default radial grid has 75 points
   const int nrad = 75;
   // construct Chebyshev grid

@@ -1,5 +1,5 @@
 //
-// BAGEL - Parallel electron correlation program.
+// BAGEL - Brilliantly Advanced General Electronic Structure Library
 // Filename: state_tensor.h
 // Copyright (C) 2014 Toru Shiozaki
 //
@@ -8,19 +8,18 @@
 //
 // This file is part of the BAGEL package.
 //
-// The BAGEL package is free software; you can redistribute it and/or modify
-// it under the terms of the GNU Library General Public License as published by
-// the Free Software Foundation; either version 3, or (at your option)
-// any later version.
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
 //
-// The BAGEL package is distributed in the hope that it will be useful,
+// This program is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-// GNU Library General Public License for more details.
+// GNU General Public License for more details.
 //
-// You should have received a copy of the GNU Library General Public License
-// along with the BAGEL package; see COPYING.  If not, write to
-// the Free Software Foundation, 675 Mass Ave, Cambridge, MA 02139, USA.
+// You should have received a copy of the GNU General Public License
+// along with this program.  If not, see <http://www.gnu.org/licenses/>.
 //
 
 
@@ -84,6 +83,22 @@ class StateTensor {
 
     btas::PTensor2<const double> get_block(const MonomerKey& i, const MonomerKey& j, const int k) const {
       return sparse_.at(std::make_tuple(k, i, j));
+    }
+
+    std::shared_ptr<Matrix> contract_statetensor(const std::array<MonomerKey,4>& keys, const int istate) const {
+      auto& A  = keys[0]; auto& B  = keys[1];
+      auto& Ap = keys[2]; auto& Bp = keys[3];
+
+      assert(A == Ap);
+      assert(exist(std::make_tuple(istate,A,B)));
+      assert(exist(std::make_tuple(istate,Ap,Bp)));
+
+      auto tensor = std::make_shared<btas::Tensor2<double>>(B.nstates(), Bp.nstates());
+      btas::contract(1.0, sparse_.at(std::make_tuple(istate,A,B)), {0,1}, sparse_.at(std::make_tuple(istate,Ap,Bp)), {0,2}, 0.0, *tensor, {1,2});
+      btas::CRange<2> range(tensor->extent(0)*tensor->extent(1), 1);
+      MatView view(btas::make_view(range, tensor->storage()), /*localized*/true);
+
+      return std::make_shared<Matrix>(view);
     }
 
 };

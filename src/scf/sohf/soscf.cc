@@ -1,5 +1,5 @@
 //
-// BAGEL - Parallel electron correlation program.
+// BAGEL - Brilliantly Advanced General Electronic Structure Library
 // Filename: soscf.cc
 // Copyright (C) 2013 Toru Shiozaki
 //
@@ -8,25 +8,24 @@
 //
 // This file is part of the BAGEL package.
 //
-// The BAGEL package is free software; you can redistribute it and/or modify
-// it under the terms of the GNU Library General Public License as published by
-// the Free Software Foundation; either version 3, or (at your option)
-// any later version.
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
 //
-// The BAGEL package is distributed in the hope that it will be useful,
+// This program is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-// GNU Library General Public License for more details.
+// GNU General Public License for more details.
 //
-// You should have received a copy of the GNU Library General Public License
-// along with the BAGEL package; see COPYING.  If not, write to
-// the Free Software Foundation, 675 Mass Ave, Cambridge, MA 02139, USA.
+// You should have received a copy of the GNU General Public License
+// along with this program.  If not, see <http://www.gnu.org/licenses/>.
 //
 
 #include <src/scf/sohf/soscf.h>
 #include <src/scf/sohf/sofock.h>
 #include <src/util/math/diis.h>
-#include <src/wfn/relreference.h>
+#include <src/wfn/zreference.h>
 
 using namespace std;
 using namespace bagel;
@@ -41,6 +40,12 @@ SOSCF::SOSCF(const shared_ptr<const PTree> idata, const shared_ptr<const Geometr
 
   soeig_ = VectorB(geom_->nbasis() * 2);
   sohcore_ = make_shared<const SOHcore>(geom_, hcore_);
+
+  if (re != nullptr) {
+    auto cref = dynamic_pointer_cast<const ZReference>(re);
+    if (!cref) throw runtime_error("SOSCF can only use a complex Reference.");
+    socoeff_ = cref->zcoeff();
+  }
 }
 
 void SOSCF::compute() {
@@ -61,8 +66,7 @@ void SOSCF::compute() {
     socoeff = make_shared<DistZMatrix>(*sotildex * *intermediate);
   } else {
     socoeff = socoeff_->distmatrix();
-    aodensity = socoeff->form_density_rhf(2*nocc_);
-    auto sofock = make_shared<const SOFock>(geom_, sohcore_, aodensity->matrix());
+    auto sofock = make_shared<const SOFock>(geom_, sohcore_, make_shared<ZMatrix>(socoeff->matrix()->slice(0, 2*nocc_)));
     shared_ptr<const DistZMatrix> distfock = sofock->distmatrix();
     auto intermediate = make_shared<DistZMatrix>(*sotildex % *distfock * *sotildex);
     intermediate->diagonalize(soeig());
@@ -80,7 +84,7 @@ void SOSCF::compute() {
   DIIS<DistZMatrix, ZMatrix> diis(diis_size_);
 
   for (int iter = 0; iter != max_iter_; ++iter) {
-    auto sofock = make_shared<const SOFock> (geom_, sohcore_, make_shared<ZMatrix>(socoeff->matrix()->slice(0, 2*nocc_)));
+    auto sofock = make_shared<const SOFock>(geom_, sohcore_, make_shared<ZMatrix>(socoeff->matrix()->slice(0, 2*nocc_)));
     shared_ptr<const DistZMatrix> distfock = sofock->distmatrix();
     const complex<double> energy = 0.5 * ((*sohcore_ + *sofock) * *aodensity->matrix()).trace() + geom_->nuclear_repulsion();
     assert(energy.imag() < 1e-8);
@@ -136,7 +140,8 @@ shared_ptr<const ZMatrix> SOSCF::sooverlap() {
 }
 
 shared_ptr<const Reference> SOSCF::conv_to_ref() const {
-  auto out = make_shared<RelReference>(geom_, socoeff_, energy_, 0, 2*nocc_, 0, socoeff_->mdim()-2*nocc_, /*gaunt_*/ false, /*breit_*/ false);
+  auto c = make_shared<ZCoeff>(*socoeff_);
+  auto out = make_shared<ZReference>(geom_, c, energy_, nocc_, 0, socoeff_->mdim()/2-nocc_);
   out->set_eig(soeig_);
   return out;
 }

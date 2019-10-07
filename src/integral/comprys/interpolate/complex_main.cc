@@ -8,7 +8,7 @@
 //////Basic Setup and Namespaces//////////
 //////////////////////////////////////////
 
-//#define TESTING 20              // Define this to skip code generation and instead run the functions in the generated files.  The number you give defines the number of tests to be run.  
+//#define TESTING 20              // Define this to skip code generation and instead run the functions in the generated files.  The number you give defines the number of tests to be run.
 
 constexpr double IMULT = 0.01;          // Used for the "-h" option, this defines the starting value of T.imag as a multiple of T.real
 constexpr double MAXABS_ERROR = 1e-14;
@@ -31,11 +31,11 @@ constexpr int IGRID2 = 8;
 #include <cmath>         // A collection of pre-defined mathematical functions such as cos()
 #include <string>        // Allows us to use strings as a variable type
 #include <iomanip>       // Defines setw and setprecision, which I think just deal with how the output is presented
-#include <map>           // Provides the "map" class templates.  
+#include <map>           // Provides the "map" class templates.
 #include "mpreal.h"      // Defines the mpreal data type and all its uses
 #include "gmp_macros.h"  // This just defines the values of SETPREC and GMPPI
 #include <boost/lexical_cast.hpp>  // This gives you the ability to convert between data types
-#include <cassert>       // This provides a debugging tool so "assert" functions can be checked.  It shouldn't be needed in the final form?  
+#include <cassert>       // This provides a debugging tool so "assert" functions can be checked.  It shouldn't be needed in the final form?
 
 using namespace std;
 using namespace mpfr;
@@ -46,8 +46,8 @@ using namespace bagel;
 //////Definitions of Functions////////////
 //////////////////////////////////////////
 
-// dsyev is defined externally, I think as part of the LAPACK package...?  
-// Its purpose is to obtain the eigenvalues and eigenvectors of a matrix in order to 
+// dsyev is defined externally, I think as part of the LAPACK package...?
+// Its purpose is to obtain the eigenvalues and eigenvectors of a matrix in order to
 //   calculate the aroot and aweight vectors; see below for details
 extern "C" {
   void dsyev_(const char*, const char*, const int*, double*, const int*, double*, double*, const int*, int*);
@@ -65,7 +65,7 @@ complex<double> randcomplexdoub(const double mintr, const double maxtr, const do
   const double realdouble = randreal/10000 + mintr;
   const double imagdouble = randimag/10000 + minti;
   complex<double> random (realdouble, imagdouble);
-  return random; 
+  return random;
 }
 
 
@@ -80,24 +80,24 @@ vector<mpreal> chebft(int n) {
   return out;
 }
 
-void complex_get_C (const complex<mpreal>& Tbase, const mpreal Rstride, const mpreal Istride, const int rank, const int RGRID, const int IGRID, vector<vector<double>>& cxr, vector<vector<double>>& cxi, vector<vector<double>>& cwr, vector<vector<double>>& cwi){
-  mpfr::mpreal::set_default_prec(GMPPREC); 
+void complex_get_C (const complex<mpreal>& Tbase, const mpreal& Rstride, const mpreal& Istride, const int rank, const int RGRID, const int IGRID, vector<vector<double>>& cxr, vector<vector<double>>& cxi, vector<vector<double>>& cwr, vector<vector<double>>& cwi){
+  mpfr::mpreal::set_default_prec(GMPPREC);
   using namespace std;
   cout << "TBase = " << Tbase << ", " << rank << " roots needed.  Using " << RGRID << " by " << IGRID << " gridpoints." << endl;
   const int nr = RGRID;
   const int ni = IGRID;
   const int ntot = nr * ni;
-  
+
   ////////////////////////////////////////////////////////////////
   //// Generates Chebyshev nodes over the range Tmin to Tmax /////
   ////////////////////////////////////////////////////////////////
 
   const mpreal zero = "0.0";
-  const mpreal half = "0.5";     
+  const mpreal half = "0.5";
   const complex<mpreal> Tmin = Tbase;
   const complex<mpreal> Tmax ( Tbase.real() + Rstride , Tbase.imag() + Istride );
   const complex<mpreal> Tp = half * (Tmin + Tmax);  // Center of the Chebyshev interval
-  vector<complex<mpreal>> Tpoints(ntot);         
+  vector<complex<mpreal>> Tpoints(ntot);
   vector<mpreal> chebR = chebft(nr);
   vector<mpreal> chebI = chebft(ni);
   for (int j = 0; j != ni; j++) {
@@ -109,7 +109,7 @@ void complex_get_C (const complex<mpreal>& Tbase, const mpreal Rstride, const mp
     }
   }
 
-  vector<vector<vector<mpreal>>> table_reserve(ntot);  
+  vector<vector<vector<mpreal>>> table_reserve(ntot);
   for (int i = 0; i != ntot; i++){
     complex<mpreal> ttt = Tpoints[i];
     vector<complex<mpreal>> dx(rank);
@@ -127,23 +127,23 @@ void complex_get_C (const complex<mpreal>& Tbase, const mpreal Rstride, const mp
     }
   }
 
-  for (int ii=0; ii != rank; ii++) {               // This for loop essentially reorganizes data.  We are taking the data from rysroot_gmp and 
-    vector<double> tcxr(ntot);                       // Ordering the 12 gridpoints for a given interpolation together, rather than having all 
+  for (int ii=0; ii != rank; ii++) {               // This for loop essentially reorganizes data.  We are taking the data from rysroot_gmp and
+    vector<double> tcxr(ntot);                       // Ordering the 12 gridpoints for a given interpolation together, rather than having all
     vector<double> tcxi(ntot);                       // the roots & weights for a given Tpoint together
     vector<double> tcwr(ntot);
     vector<double> tcwi(ntot);
 
-    vector<mpreal> cdxr, cdwr, cdxi, cdwi;      
+    vector<mpreal> cdxr, cdwr, cdxi, cdwi;
 
     for (int j = 0; j != ntot; j++) {
       cdxr.push_back(table_reserve[j][ii][0]);     // These contain the real & imag parts of the roots & weights at each Tpoint
-      cdxi.push_back(table_reserve[j][ii][1]);     // They are ordered as such:  
+      cdxi.push_back(table_reserve[j][ii][1]);     // They are ordered as such:
       cdwr.push_back(table_reserve[j][ii][2]);     // They run through all (144) Tpoints, giving the data for the first root/weight pair of each
       cdwi.push_back(table_reserve[j][ii][3]);     // Then we repeat the ntot=144-point cycle, reporting the second root/weight, and so on...
     }
 
     {
-      // Now we check for convergence along the imaginary axis, and throw the data out.  We'll keep the data for the real axis.  
+      // Now we check for convergence along the imaginary axis, and throw the data out.  We'll keep the data for the real axis.
       vector<double> tcxr2(ntot);
       vector<double> tcxi2(ntot);
       vector<double> tcwr2(ntot);
@@ -170,10 +170,10 @@ void complex_get_C (const complex<mpreal>& Tbase, const mpreal Rstride, const mp
           tcwi2[i*ni + j] = (sumwi * fac).toDouble() ;
         }
 
-        assert (fabs(tcxr2[(i+1)*ni - 1]) < 1.0e-6 || fabs(tcwr2[(i+1)*ni - 1]) < 1.0e-6 || fabs(tcxi2[(i+1)*ni - 1]) < 1.0e-6 || fabs(tcwi2[(i+1)*ni - 1]) < 1.0e-6); 
-        // If this assertion has been triggered, then the polynomial interpolation along the imaginary axis gave a very poor fit for the values obtained for each gridpoint.  
-        // The fit was bad enough that it likely cannot be fixed by simply using more gridpoints.  Check the actual values obtained for each gridpoint; perhaps some 
-        // of them will be implausibly large or reported in a different order than for the other gridpoints.  
+        assert (fabs(tcxr2[(i+1)*ni - 1]) < 1.0e-6 || fabs(tcwr2[(i+1)*ni - 1]) < 1.0e-6 || fabs(tcxi2[(i+1)*ni - 1]) < 1.0e-6 || fabs(tcwi2[(i+1)*ni - 1]) < 1.0e-6);
+        // If this assertion has been triggered, then the polynomial interpolation along the imaginary axis gave a very poor fit for the values obtained for each gridpoint.
+        // The fit was bad enough that it likely cannot be fixed by simply using more gridpoints.  Check the actual values obtained for each gridpoint; perhaps some
+        // of them will be implausibly large or reported in a different order than for the other gridpoints.
 
         if (fabs(tcxr2[(i+1)*ni - 1]) > 1.0e-12 || fabs(tcwr2[(i+1)*ni - 1]) > 1.0e-12 || fabs(tcxi2[(i+1)*ni - 1]) > 1.0e-12 || fabs(tcwi2[(i+1)*ni - 1]) > 1.0e-12) {
         cout << "CHEB FAILED (imag axis) for root " << ii+1 << " of " << rank << ", T ranging from (" << Tpoints[i].real() << "," << Tbase.imag() << ") to (" << Tpoints[i].real() << "," << Tbase.imag() + Istride << ")" << endl;
@@ -218,20 +218,20 @@ void complex_get_C (const complex<mpreal>& Tbase, const mpreal Rstride, const mp
 */
       }
       // If the last value of tc__ is not tiny, output a warning and the data points?
-      // This warning shows up if you use too few grid points in the interpolation!  
+      // This warning shows up if you use too few grid points in the interpolation!
 
-      assert (fabs(tcxr[(i+1)*nr - 1]) < 1.0e-6 || fabs(tcwr[(i+1)*nr - 1]) < 1.0e-6 || fabs(tcxi[(i+1)*nr - 1]) < 1.0e-6 || fabs(tcwi[(i+1)*nr - 1]) < 1.0e-6); 
-      // If this assertion has been triggered, then the polynomial interpolation along the real axis gave a very poor fit for the values obtained for each gridpoint.  
-      // The fit was bad enough that it likely cannot be fixed by simply using more gridpoints.  Check the actual values obtained for each gridpoint; perhaps some 
-      // of them will be implausibly large or reported in a different order than for the other gridpoints.  
+      assert (fabs(tcxr[(i+1)*nr - 1]) < 1.0e-6 || fabs(tcwr[(i+1)*nr - 1]) < 1.0e-6 || fabs(tcxi[(i+1)*nr - 1]) < 1.0e-6 || fabs(tcwi[(i+1)*nr - 1]) < 1.0e-6);
+      // If this assertion has been triggered, then the polynomial interpolation along the real axis gave a very poor fit for the values obtained for each gridpoint.
+      // The fit was bad enough that it likely cannot be fixed by simply using more gridpoints.  Check the actual values obtained for each gridpoint; perhaps some
+      // of them will be implausibly large or reported in a different order than for the other gridpoints.
 
       if (fabs(tcxr[(i+1)*nr - 1]) > 1.0e-12 || fabs(tcwr[(i+1)*nr - 1]) > 1.0e-12 || fabs(tcxi[(i+1)*nr - 1]) > 1.0e-12 || fabs(tcwi[(i+1)*nr - 1]) > 1.0e-12) {
         cout << "CHEB FAILED (real axis) for root " << ii+1 << " of " << rank << ", T ranging from (" << Tbase.real() << "," << Tpoints[i*nr].imag() << ") to (" << Tbase.real()+Rstride << "," << Tpoints[i*nr].imag() << ")" << endl;
           cout << setw(20) << Tpoints[(i+1)*nr-1] << "tcx/w " << setw(20) << tcxr[(i+1)*nr - 1]  << setw(20) << tcxi[(i+1)*nr-1]  << setw(20) << tcwr[(i+1)*nr-1]  << setw(20) << tcwi[(i+1)*nr-1]  << endl;
-//        cout << " caution: cheb not converged  - Root " << ii+1 << setprecision(10) << fixed << " " << tcxr[(i+1)*nr - 1] << " " 
-//             << tcwr[(i+1)*nr - 1] << " " << tcxi[(i+1)*nr - 1] << " " << tcwi[(i+1)*nr - 1] << endl; 
+//        cout << " caution: cheb not converged  - Root " << ii+1 << setprecision(10) << fixed << " " << tcxr[(i+1)*nr - 1] << " "
+//             << tcwr[(i+1)*nr - 1] << " " << tcxi[(i+1)*nr - 1] << " " << tcwi[(i+1)*nr - 1] << endl;
 //        for (int p = 0; p !=nr; ++p) {
-//          cout << setw(20) << Tpoints[i*nr + p] << "cdx/w " << setw(20) << cdxr[i*nr + p].toDouble() << setw(20) << cdxi[i*nr + p].toDouble() 
+//          cout << setw(20) << Tpoints[i*nr + p] << "cdx/w " << setw(20) << cdxr[i*nr + p].toDouble() << setw(20) << cdxi[i*nr + p].toDouble()
 //               << setw(20) << cdwr[i*nr + p].toDouble() << setw(20) << cdwi[i*nr + p].toDouble() << endl;
 //        }
 //        for (int p = 0; p !=nr; ++p) {
@@ -245,7 +245,7 @@ void complex_get_C (const complex<mpreal>& Tbase, const mpreal Rstride, const mp
     cxr.push_back(tcxr);
     cxi.push_back(tcxi);
     cwr.push_back(tcwr);
-    cwi.push_back(tcwi); 
+    cwi.push_back(tcwi);
   }
 }
 
@@ -266,7 +266,7 @@ int main (int argc, char** argv) {
     ///// Testing with random numbers -t  /////
     ///////////////////////////////////////////
     if (toggle == "-t") {
-      
+
       // Here we define the number of T values we want to evaluate
       const int NT = TESTING;
 
@@ -306,28 +306,28 @@ int main (int argc, char** argv) {
             rysw[k*nroot+j].real( ryswvec[j].real().toDouble() );
             ryst[k*nroot+j].imag( rystvec[j].imag().toDouble() );
             rysw[k*nroot+j].imag( ryswvec[j].imag().toDouble() );
-          }      
+          }
         }
- 
-        // Automated accuracy check:  
+
+        // Automated accuracy check:
         for(int i = 0; i!=NT*nroot; i++){
-  
+
           mpreal rootRerror = ryst[i].real() - mapt[i].real();
           mpreal rootIerror = ryst[i].imag() - mapt[i].imag();
-          mpreal rootRrel = rootRerror / fabs(ryst[i]); 
+          mpreal rootRrel = rootRerror / fabs(ryst[i]);
           mpreal rootIrel = rootIerror / fabs(ryst[i]);
           mpreal weightRerror = rysw[i].real() - mapw[i].real();
           mpreal weightIerror = rysw[i].imag() - mapw[i].imag();
-          mpreal weightRrel = weightRerror / fabs(rysw[i]); 
+          mpreal weightRrel = weightRerror / fabs(rysw[i]);
           mpreal weightIrel = weightIerror / fabs(rysw[i]);
-  
+
           if (fabs(rootRerror) > MAXABS_ERROR || fabs(rootIerror) > MAXABS_ERROR || fabs(weightRerror) > MAXABS_ERROR || fabs(weightIerror) > MAXABS_ERROR) {
             cout << "Absolute error too high! T = " << Ts[i/nroot] << ", root " << i%nroot+1 << " of " << nroot << "." << endl;
             cout << setprecision(15) << "Mapped root  = " << mapt[i] << " and mapped weight  = " << mapw[i] << endl;
             cout << setprecision(15) << "Rysroot root = " << ryst[i] << " and rysroot weight = " << rysw[i] << endl;
             ++failcount[nroot-1];
           } else {
-            if (rootRrel > MAXREL_ERROR || rootIrel > MAXREL_ERROR) {                                                                // To check relative accuracy of roots only 
+            if (rootRrel > MAXREL_ERROR || rootIrel > MAXREL_ERROR) {                                                                // To check relative accuracy of roots only
 //            if (rootRrel > MAXREL_ERROR || rootIrel > MAXREL_ERROR || weightRrel > MAXREL_ERROR || weightIrel > MAXREL_ERROR) {    // To check relative accuracy of both roots and weights
               cout << "Relative error too high! T = " << Ts[i/nroot] << ", root " << i%nroot+1 << "of " << nroot << "." << endl;
               cout << setprecision(15) << "Mapped root  = " << mapt[i] << " and mapped weight  = " << mapw[i] << endl;
@@ -337,7 +337,7 @@ int main (int argc, char** argv) {
 //                cout << "success for T = " << Ts[i/nroot] << ", root " << i%nroot+1 << " of " << nroot << "." << endl;
             }
           }
-        } 
+        }
         cout << "Total fails for " << nroot << "-root case = " << failcount[nroot-1] << ", failure rate = " << setprecision(4) << failcount[nroot-1]/(NT*nroot)*100 << "%" << endl;
       }
       cout << "Random number seed = " << seed << ". " << endl;
@@ -357,7 +357,7 @@ int main (int argc, char** argv) {
         // Here we define the number of T values we want to evaluate
         bool pass = true;
         const int NT = 1;
-  
+
         // Here we initialize the arrays that will contain our results
         const static ComplexERIRootList mapT;
         const complex<mpreal> czero (0,0);
@@ -376,10 +376,10 @@ int main (int argc, char** argv) {
           for (int j=0; j != NT; j++) {
             Ts[j] = Ts[j] * 0.985;
           }
-          
+
           // Evaluate each one first using the mapping in the generated files
           mapT.root(nroot, Ts, mapt, mapw, NT);
-      
+
           // Then by converting to mpreal and runing complex_rysroot
           for (int k = 0; k != NT; k++){
             const complex<mpreal> rysT = Ts[k];
@@ -391,19 +391,19 @@ int main (int argc, char** argv) {
               rysw[k*nroot+j].real( ryswvec[j].real().toDouble() );
               ryst[k*nroot+j].imag( rystvec[j].imag().toDouble() );
               rysw[k*nroot+j].imag( ryswvec[j].imag().toDouble() );
-            }      
+            }
           }
-      
-          // Automated accuracy check:  
+
+          // Automated accuracy check:
           for(int i = 0; i!=NT*nroot; i++){
 
             double rootRerror = ryst[i].real() - mapt[i].real();
             double rootIerror = ryst[i].imag() - mapt[i].imag();
-            double rootRrel = fabs(rootRerror / ryst[i].real()); 
+            double rootRrel = fabs(rootRerror / ryst[i].real());
             double rootIrel = fabs(rootIerror / ryst[i].imag());
             double weightRerror = rysw[i].real() - mapw[i].real();
             double weightIerror = rysw[i].imag() - mapw[i].imag();
-            double weightRrel = fabs(weightRerror / rysw[i].real()); 
+            double weightRrel = fabs(weightRerror / rysw[i].real());
             double weightIrel = fabs(weightIerror / rysw[i].imag());
 
             if (fabs(rootRerror) > MAXABS_ERROR || fabs(rootIerror) > MAXABS_ERROR || fabs(weightRerror) > MAXABS_ERROR || fabs(weightIerror) > MAXABS_ERROR) {
@@ -436,13 +436,13 @@ int main (int argc, char** argv) {
 
       const string Treal = argv[2];
       const double Tr = lexical_cast<double>(Treal);
-    
+
       const complex<mpreal> zero (0,0);
       complex<mpreal> T = zero;
       T.real(Tr);
- 
+
 //      cout << endl << "For the " << n << "-point quadrature of an ERI where T = " << Tr;
-      if(argc > 3){ 
+      if(argc > 3){
         const string Timag = argv[3];
         const double Ti = lexical_cast<double>(Timag);
         T.imag(Ti);
@@ -472,15 +472,15 @@ complex_get_C (Tbase, Rstride, Istride, rankt, cxr, cxi, cwr, cwi);
   ////////////////////////////////////////////////////////
 
   for (int nroot=1; nroot <= RYS_MAX; ++nroot) {
-    
+
     // Here we define the range across which we will use the interpolation
     const int MAXTRlist[13] = {34,42,48,54,60,66,70,76,80,86,92,96,100};
     const int MAXTR = MAXTRlist[nroot-1];
-    const int MINTR = -2;         
+    const int MINTR = -2;
     const int MINTI = 0;
     const double MAXTI = 0.5;
 
-    const mpreal mrstride = "2.0";  
+    const mpreal mrstride = "2.0";
     const mpreal mistride = "0.5";
     const double drstride = mrstride.toDouble();
     const double distride = mistride.toDouble();
@@ -490,7 +490,7 @@ complex_get_C (Tbase, Rstride, Istride, rankt, cxr, cxi, cwr, cwi);
     const int tbox = rbox*ibox;
     cout << "rbox = " << rbox << ", ibox = " << ibox << endl;
     assert( ((MAXTR-MINTR)/drstride)/rbox == 1 );       // This assertion ensures that the interpolation range is an integer multiple of drstride.
-    assert( ((MAXTI-MINTI)/distride)/ibox == 1 );       // This assertion ensures that the interpolation range is an integer multiple of distride.  
+    assert( ((MAXTI-MINTI)/distride)/ibox == 1 );       // This assertion ensures that the interpolation range is an integer multiple of distride.
 
     cout << "Generating data for " << nroot << " roots." << endl;
     vector<double> aroot;
@@ -506,7 +506,7 @@ complex_get_C (Tbase, Rstride, Istride, rankt, cxr, cxi, cwr, cwi);
     ////////////////////////////////////////////////////////////
 
     // These next 13 lines get somewhat ugly but are not interesting
-    // They are just here to define the inputs for the dsyev function    
+    // They are just here to define the inputs for the dsyev function
     // Google "dsyev" to see what they each mean
     double a[10000] = {0.0};
     double b[100];
@@ -545,7 +545,7 @@ complex_get_C (Tbase, Rstride, Istride, rankt, cxr, cxi, cwr, cwi);
     ofs.open(("../" + filename).c_str());
     ofs << "\
 //\n\
-// BAGEL - Parallel electron correlation program.\n\
+// BAGEL - Brilliantly Advanced General Electronic Structure Library\n\
 // Filename: " + filename + "\n\
 // Copyright (C) 2013 Toru Shiozaki\n\
 //\n\
@@ -554,19 +554,18 @@ complex_get_C (Tbase, Rstride, Istride, rankt, cxr, cxi, cwr, cwi);
 //\n\
 // This file is part of the BAGEL package.\n\
 //\n\
-// The BAGEL package is free software; you can redistribute it and/or modify\n\
-// it under the terms of the GNU Library General Public License as published by\n\
-// the Free Software Foundation; either version 3, or (at your option)\n\
-// any later version.\n\
+// This program is free software: you can redistribute it and/or modify\n\
+// it under the terms of the GNU General Public License as published by\n\
+// the Free Software Foundation, either version 3 of the License, or\n\
+// (at your option) any later version.\n\
 //\n\
-// The BAGEL package is distributed in the hope that it will be useful,\n\
+// This program is distributed in the hope that it will be useful,\n\
 // but WITHOUT ANY WARRANTY; without even the implied warranty of\n\
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the\n\
-// GNU Library General Public License for more details.\n\
+// GNU General Public License for more details.\n\
 //\n\
-// You should have received a copy of the GNU Library General Public License\n\
-// along with the BAGEL package; see COPYING.  If not, write to\n\
-// the Free Software Foundation, 675 Mass Ave, Cambridge, MA 02139, USA.\n\
+// You should have received a copy of the GNU General Public License\n\
+// along with this program.  If not, see <http://www.gnu.org/licenses/>.\n\
 //\n\
 \n\
 #include <algorithm>\n\
@@ -579,13 +578,13 @@ using namespace bagel;\n\
 void ComplexERIRootList::" << func << nroot << "(const complex<double>* ta, complex<double>* rr, complex<double>* ww, const int n) {\n";
 
 // These next two sections print the ax and aw vectors we generated based on
-// the output of the "dsyev" function.  
+// the output of the "dsyev" function.
 ofs << "\n\
   static constexpr double ax["<<nroot<<"] = {";
     for (int j=0; j!=nroot; ++j) {
       ofs << scientific << setprecision(15) << setw(20) << aroot[j];
       if (j!=nroot-1) ofs << ",";
-      if (j%7 == 4) ofs << endl << "    "; 
+      if (j%7 == 4) ofs << endl << "    ";
     }
     ofs << "};" << endl;
     ofs << "\
@@ -593,11 +592,11 @@ ofs << "\n\
     for (int j=0; j!=nroot; ++j) {
       ofs << scientific << setprecision(15) << setw(20) << aweight[j];
       if (j!=nroot-1) ofs << ",";
-      if (j%7 == 4) ofs << endl << "    "; 
+      if (j%7 == 4) ofs << endl << "    ";
     }
     ofs << "};" << endl;
 
-    // Now we generate long strings (listx and listw) and dump all the x and w values into them to facilitate printing.  
+    // Now we generate long strings (listx and listw) and dump all the x and w values into them to facilitate printing.
     // This is a simplification:  It forces you to use the same RBOX (currently 32) for all generated files
     // Toru's version defined a vector rbox_, so that you could use a different value depending on the rank of the polynomial
     stringstream listxr, listxi, listwr, listwi;
@@ -610,12 +609,12 @@ ofs << "\n\
 
     for (int k=0; k != ibox; ++k) {               // For each row of boxes along the imaginary axis
       for (int j=0; j != rbox; ++j) {             // For each box along the real axis
-      
+
         const int jk = k*rbox+j;
         vector<vector<double>> cxr, cxi, cwr, cwi;
         complex<mpreal> Tbase(MINTR + j*mrstride, MINTI + k*mistride);
 //        cout << "Tbase = " << Tbase << ", mrstride = " << mrstride << ", mistride = " << mistride << ", nroot = " << nroot << endl;
-        
+
         if (j < CUTOFF) complex_get_C (Tbase, mrstride, mistride, nroot, RGRID1, IGRID1, cxr, cxi, cwr, cwi);
         else complex_get_C (Tbase, mrstride, mistride, nroot, RGRID2, IGRID2, cxr, cxi, cwr, cwi);
 
@@ -626,28 +625,28 @@ ofs << "\n\
           const vector<double> wi = cwi[i];
 
           for (auto iter = xr.begin(); iter != xr.end(); ++iter) {
-            listxr << indent << scientific << setprecision(15) << ((*iter > 0.0 || fabs(*iter) < tiny) ? "  " : " ") << setw(20) << 
+            listxr << indent << scientific << setprecision(15) << ((*iter > 0.0 || fabs(*iter) < tiny) ? "  " : " ") << setw(20) <<
                                 (fabs(*iter) < tiny ? 0.0 : *iter);
             if (iter + 1 != xr.end() || jk+1 != tbox || i+1 != nroot) listxr << ",";
             if (xrcnt++ % 7 == 4) listxr << "\n";
           }
 
           for (auto iter = xi.begin(); iter != xi.end(); ++iter) {
-            listxi << indent << scientific << setprecision(15) << ((*iter > 0.0 || fabs(*iter) < tiny) ? "  " : " ") << setw(20) << 
+            listxi << indent << scientific << setprecision(15) << ((*iter > 0.0 || fabs(*iter) < tiny) ? "  " : " ") << setw(20) <<
                                 (fabs(*iter) < tiny ? 0.0 : *iter);
             if (iter + 1 != xi.end() || jk+1 != tbox || i+1 != nroot) listxi << ",";
             if (xicnt++ % 7 == 4) listxi << "\n";
           }
 
           for (auto iter = wr.begin(); iter != wr.end(); ++iter) {
-            listwr << indent << scientific << setprecision(15) << ((*iter > 0.0 || fabs(*iter) < tiny) ? "  " : " ") << setw(20) << 
+            listwr << indent << scientific << setprecision(15) << ((*iter > 0.0 || fabs(*iter) < tiny) ? "  " : " ") << setw(20) <<
                                 (fabs(*iter) < tiny ? 0.0 : *iter);
             if (iter + 1 != wr.end() || jk+1 != tbox || i+1 != nroot) listwr << ",";
             if (wrcnt++ % 7 == 4) listwr << "\n";
           }
 
           for (auto iter = wi.begin(); iter != wi.end(); ++iter) {
-            listwi << indent << scientific << setprecision(15) << ((*iter > 0.0 || fabs(*iter) < tiny) ? "  " : " ") << setw(20) << 
+            listwi << indent << scientific << setprecision(15) << ((*iter > 0.0 || fabs(*iter) < tiny) ? "  " : " ") << setw(20) <<
                                 (fabs(*iter) < tiny ? 0.0 : *iter);
             if (iter + 1 != wi.end() || jk+1 != tbox || i+1 != nroot) listwi << ",";
             if (wicnt++ % 7 == 4) listwi << "\n";
@@ -655,7 +654,7 @@ ofs << "\n\
         }
       }
     }
-      
+
   // This next little chunk prints all the x and w values from their strings into the generated files
   // Note that I have removed a line that is unneded due to exclusion of BREIT & SPIN2:  string tafactor = "t";
     ofs << "\
@@ -675,10 +674,10 @@ ofs << "\n\
     ofs << listwi.str() << "\
   };" << endl;
     ofs << "\
-";  
+";
 
-  // At this point, we have printed off all the calculated x and w values.  
-  // The rest of this file is about code generation - producing some math that will appear in the generated files but not be run by main.cc.  
+  // At this point, we have printed off all the calculated x and w values.
+  // The rest of this file is about code generation - producing some math that will appear in the generated files but not be run by main.cc.
   ofs << "\
   int offset = -" << nroot << ";\n\
   for (int i = 1; i <= n; ++i) {\n\
@@ -688,7 +687,7 @@ ofs << "\n\
       fill_n(rr+offset, " << nroot << ", 0.5);\n\
       fill_n(ww+offset, " << nroot << ", 0.0);\n\
     } else if (t.real() < " << MINTR << ") {\n\
-      throw runtime_error (\"ERROR!  Invalid T value!  Real part is too small.  Consider regenerating interpolation files with a larger domain or reducing the magnetic field strength\");\n\
+      throw runtime_error (\"ERROR!  Invalid T value!  Real part is too small.  Consider regenerating interpolation files with a larger domain or reducing the magnetic field strength.\");\n\
     } else if (t.real() >= " << MAXTR << ") {\n";
 //      cout << \"T = \" << t << \", need " << nroot << " roots:  Used high-T approximation\" << endl;\n
       ofs << "\
@@ -704,8 +703,8 @@ ofs << "\n\
       if (torig.imag() < 0) t = conj(torig);\n\
       int itr = static_cast<int>((t.real()-(" << MINTR <<"))*" << setw(20) << setprecision(15) << fixed << 1.0/drstride << ") ;\n\
       int iti = static_cast<int>((t.imag()-(" << MINTI <<"))*" << setw(20) << setprecision(15) << fixed << 1.0/distride << ") ;\n\
-      double tr = (t.real()-itr*" << drstride << "-" << setw(20) << setprecision(15) << fixed << drstride/2.0 << ") *" << setw(20) << setprecision(15) << fixed << 2.0/drstride << " - (" << MINTR << ") ;\n\
-      double ti = (t.imag()-iti*" << distride << "-" << setw(20) << setprecision(15) << fixed << distride/2.0 << ") *" << setw(20) << setprecision(15) << fixed << 2.0/distride << " - (" << MINTI << ") ;\n\
+      double tr = (t.real()-itr*" << drstride << "-" << setw(20) << setprecision(15) << fixed << drstride/2.0 << " - " << MINTR << ") *" << setw(20) << setprecision(15) << fixed << 2.0/drstride << ";\n\
+      double ti = (t.imag()-iti*" << distride << "-" << setw(20) << setprecision(15) << fixed << distride/2.0 << " - " << MINTI << ") *" << setw(20) << setprecision(15) << fixed << 2.0/distride << ";\n\
       const double tr2 = tr * 2.0;\n\
       const double ti2 = ti * 2.0;\n";
       for (int cycle = 0; cycle != 2; cycle++) {
@@ -724,10 +723,10 @@ ofs << "\n\
 //        cout << \"T = \" << torig << \", need " << nroot << " roots: Used complex interpolation, with " << RGRID << " by " << IGRID << " gridpoints.\" << endl;
         ofs << "\
         for (int j=1; j <=" << nroot << "; ++j) {\n\
-          vector<double> xrval(" << IGRID << ");\n\
-          vector<double> xival(" << IGRID << ");\n\
-          vector<double> wrval(" << IGRID << ");\n\
-          vector<double> wival(" << IGRID << ");\n\
+          double xrval[" << IGRID << "];\n\
+          double xival[" << IGRID << "];\n\
+          double wrval[" << IGRID << "];\n\
+          double wival[" << IGRID << "];\n\
           for (int k=1; k<= " << IGRID << "; k++){\n";
         if (cycle == 0) {
           ofs << "\
@@ -767,7 +766,7 @@ ofs << "\n\
             fi = tr2*di - fi + xi[boxof+" << i-1 << "];\n\
             gr = tr2*er - gr + wr[boxof+" << i-1 << "];\n\
             gi = tr2*ei - gi + wi[boxof+" << i-1 << "];\n";
-           } else {  
+           } else {
              // Last cycle:  i = 1
              ofs << "\
             xrval[k-1] = tr*dr - fr + xr[boxof+" << i-1 << "]*0.5;\n\
@@ -781,10 +780,10 @@ ofs << "\n\
           const double denom = " << IGRID << ";\n\
           const double fac = 2 / denom;\n\
           const double pi = 3.141592653589793238462;\n\
-          vector<double> tcxr(" << IGRID << ");\n\
-          vector<double> tcxi(" << IGRID << ");\n\
-          vector<double> tcwr(" << IGRID << ");\n\
-          vector<double> tcwi(" << IGRID << ");\n\
+          double tcxr[" << IGRID << "];\n\
+          double tcxi[" << IGRID << "];\n\
+          double tcwr[" << IGRID << "];\n\
+          double tcwi[" << IGRID << "];\n\
           for (int b = 0; b != " << IGRID << "; ++b) {\n\
             double sumxr = 0;\n\
             double sumxi = 0;\n\
@@ -832,7 +831,7 @@ ofs << "\n\
           fi = ti2*di - fi + tcxi[" << i-1 << "];\n\
           gr = ti2*er - gr + tcwr[" << i-1 << "];\n\
           gi = ti2*ei - gi + tcwi[" << i-1 << "];\n";
-           } else {  
+           } else {
              // Last cycle:  i = 1
              ofs << "\
           rr[offset+j-1].real( ti*dr - fr + tcxr[" << i-1 << "]*0.5 ) ;\n\

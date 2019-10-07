@@ -21,7 +21,7 @@
 #include "gmp_macros.h"
 #include <boost/lexical_cast.hpp>
 
-#include "../r2rootlist.h"
+#include "../erirootlist.h"
 
 extern "C" {
   void dsyev_(const char*, const char*, const int*, double*, const int*, double*, double*, const int*, int*);
@@ -77,6 +77,7 @@ vector<vector<double>> get_C(const mpreal tbase, const mpreal stride, int rank, 
     vector<mpreal> dw(rank);
     rysroot_gmp(ttt, dx, dw, rank, 1);
     // sort dx and dw using dx
+#ifdef DAWSON
     if (asymp) {
       for (int j = 0; j != rank; ++j) {
         table_reserve[i].insert(make_pair(-(1.0 - dx[j])*ttt[0]/((1.0 - dx_infty[j])*tt_infty[0]), dw[j]*ttt[0]/(dw_infty[j]*tt_infty[0])));
@@ -85,6 +86,10 @@ vector<vector<double>> get_C(const mpreal tbase, const mpreal stride, int rank, 
       for (int j = 0; j != rank; ++j)
         table_reserve[i].insert(make_pair(dx[j], dw[j]));
     }
+#else
+    for (int j = 0; j != rank; ++j)
+      table_reserve[i].insert(make_pair(dx[j], dw[j]));
+#endif
   }
 
   vector<vector<double>> c;
@@ -144,7 +149,7 @@ bool test(const int nrank, const double tin) {
   double dr[nsize*nrank];
   double dw[nsize*nrank];
 
-  r2root__.root(nrank, dt, dr, dw, nsize);
+  eriroot__.root(nrank, dt, dr, dw, nsize);
 
   cout << setprecision(10) << scientific << endl;
   auto iter = gmp.begin();
@@ -211,12 +216,12 @@ int main(int argc, char** argv) {
     }
   }
 
-  vector<double> nbox_(14);
-  for (int nroot=1; nroot!=14; ++nroot) {
+  vector<double> nbox_(52);
+  for (int nroot=1; nroot!=52; ++nroot) {
     nbox_[nroot] = NBOX;
   }
 
-  for (int nroot=1; nroot!=14; ++nroot) { // this is the outer most loop.
+  for (int nroot=1; nroot!=52; ++nroot) { // this is the outer most loop.
     if (argc > 2) {
       const string toggle = argv[1];
       if (toggle == "-r") {
@@ -330,7 +335,7 @@ int main(int argc, char** argv) {
     ofs.open(filename.c_str());
     ofs << "\
 //\n\
-// BAGEL - Parallel electron correlation program.\n\
+// BAGEL - Brilliantly Advanced General Electronic Structure Library\n\
 // Filename: " + filename + "\n\
 // Copyright (C) 2013 Toru Shiozaki\n\
 //\n\
@@ -339,25 +344,22 @@ int main(int argc, char** argv) {
 //\n\
 // This file is part of the BAGEL package.\n\
 //\n\
-// The BAGEL package is free software; you can redistribute it and/or modify\n\
-// it under the terms of the GNU Library General Public License as published by\n\
-// the Free Software Foundation; either version 3, or (at your option)\n\
-// any later version.\n\
+// This program is free software: you can redistribute it and/or modify\n\
+// it under the terms of the GNU General Public License as published by\n\
+// the Free Software Foundation, either version 3 of the License, or\n\
+// (at your option) any later version.\n\
 //\n\
-// The BAGEL package is distributed in the hope that it will be useful,\n\
+// This program is distributed in the hope that it will be useful,\n\
 // but WITHOUT ANY WARRANTY; without even the implied warranty of\n\
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the\n\
-// GNU Library General Public License for more details.\n\
+// GNU General Public License for more details.\n\
 //\n\
-// You should have received a copy of the GNU Library General Public License\n\
-// along with the BAGEL package; see COPYING.  If not, write to\n\
-// the Free Software Foundation, 675 Mass Ave, Cambridge, MA 02139, USA.\n\
+// You should have received a copy of the GNU General Public License\n\
+// along with this program.  If not, see <http://www.gnu.org/licenses/>.\n\
 //\n\
 \n\
 #include <algorithm> \n\
-#include <iostream> \n\
 #include <cassert>" << endl;
-#ifndef SPIN2
 #ifdef BREIT
 ofs << "#include <src/integral/rys/breitrootlist.h>\n\
 \n\
@@ -366,29 +368,30 @@ using namespace bagel;\n\
 \n\
 void BreitRootList::" << func << nroot << "(const double* ta, double* rr, double* ww, const int n) {\n" << endl;
 #else
-#ifndef DAWSON
-ofs << "#include <src/integral/rys/erirootlist.h>\n\
-\n\
-using namespace std;\n\
-using namespace bagel;\n\
-\n\
-void ERIRootList::" << func << nroot << "(const double* ta, double* rr, double* ww, const int n) {\n" << endl;
-#else
+#ifdef DAWSON
 ofs << "#include <src/integral/rys/r2rootlist.h>\n\
 \n\
 using namespace std;\n\
 using namespace bagel;\n\
 \n\
 void R2RootList::" << func << nroot << "(const double* ta, double* rr, double* ww, const int n) {\n" << endl;
-#endif
-#endif
 #else
+#ifdef SPIN2
 ofs << "#include <src/integral/rys/spin2rootlist.h>\n\
 \n\
 using namespace std;\n\
 using namespace bagel;\n\
 \n\
 void Spin2RootList::" << func << nroot << "(const double* ta, double* rr, double* ww, const int n) {\n" << endl;
+#else
+ofs << "#include <src/integral/rys/erirootlist.h>\n\
+\n\
+using namespace std;\n\
+using namespace bagel;\n\
+\n\
+void ERIRootList::" << func << nroot << "(const double* ta, double* rr, double* ww, const int n) {\n" << endl;
+#endif
+#endif
 #endif
   ofs << "\
   constexpr double ax["<<nroot<<"] = {";
@@ -544,7 +547,9 @@ void Spin2RootList::" << func << nroot << "(const double* ta, double* rr, double
       }\n\
     } else {\n\
       assert(t >= 0);\n\
-      int it = static_cast<int>(t*" << setw(20) << setprecision(15) << fixed << 1.0/stride<< ");\n";
+      int it = static_cast<int>(t*" << setw(20) << setprecision(15) << fixed << 1.0/stride<< ");\n\
+      t = (t-it*" << stride << "-" << setw(20) << setprecision(15) << fixed << stride/2.0 << ") *" << setw(20) << setprecision(15) << fixed << 2.0/stride << ";\n\
+      \n";
 #else
       ofs << "\
     } else if (t >= " << infty << ".0) {\n\

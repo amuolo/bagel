@@ -1,5 +1,5 @@
 //
-// BAGEL - Parallel electron correlation program.
+// BAGEL - Brilliantly Advanced General Electronic Structure Library
 // Filename: matrix1e.h
 // Copyright (C) 2009 Toru Shiozaki
 //
@@ -8,24 +8,23 @@
 //
 // This file is part of the BAGEL package.
 //
-// The BAGEL package is free software; you can redistribute it and/or modify
-// it under the terms of the GNU Library General Public License as published by
-// the Free Software Foundation; either version 3, or (at your option)
-// any later version.
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
 //
-// The BAGEL package is distributed in the hope that it will be useful,
+// This program is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-// GNU Library General Public License for more details.
+// GNU General Public License for more details.
 //
-// You should have received a copy of the GNU Library General Public License
-// along with the BAGEL package; see COPYING.  If not, write to
-// the Free Software Foundation, 675 Mass Ave, Cambridge, MA 02139, USA.
+// You should have received a copy of the GNU General Public License
+// along with this program.  If not, see <http://www.gnu.org/licenses/>.
 //
 
 
-#ifndef __SRC_MOLECULE_MATRIX1E_H
-#define __SRC_MOLECULE_MATRIX1E_H
+#ifndef __SRC_MAT1E_MATRIX1E_H
+#define __SRC_MAT1E_MATRIX1E_H
 
 #include <src/molecule/molecule.h>
 #include <src/util/math/matrix.h>
@@ -54,9 +53,12 @@ class Matrix1e_ : public MatType{
 
   public:
     Matrix1e_() { }
-    Matrix1e_(const std::shared_ptr<const Molecule>);
+    Matrix1e_(std::shared_ptr<const Molecule>);
     Matrix1e_(const Matrix1e_&);
     virtual ~Matrix1e_() { }
+
+    Matrix1e_& operator=(const Matrix1e_&) = default;
+    Matrix1e_& operator=(Matrix1e_&&) = default;
 
     using MatType::zero;
     using MatType::size;

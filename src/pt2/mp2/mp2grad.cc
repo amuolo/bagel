@@ -1,5 +1,5 @@
 //
-// BAGEL - Parallel electron correlation program.
+// BAGEL - Brilliantly Advanced General Electronic Structure Library
 // Filename: mp2grad.cc
 // Copyright (C) 2012 Toru Shiozaki
 //
@@ -8,19 +8,18 @@
 //
 // This file is part of the BAGEL package.
 //
-// The BAGEL package is free software; you can redistribute it and/or modify
-// it under the terms of the GNU Library General Public License as published by
-// the Free Software Foundation; either version 3, or (at your option)
-// any later version.
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
 //
-// The BAGEL package is distributed in the hope that it will be useful,
+// This program is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-// GNU Library General Public License for more details.
+// GNU General Public License for more details.
 //
-// You should have received a copy of the GNU Library General Public License
-// along with the BAGEL package; see COPYING.  If not, write to
-// the Free Software Foundation, 675 Mass Ave, Cambridge, MA 02139, USA.
+// You should have received a copy of the GNU General Public License
+// along with this program.  If not, see <http://www.gnu.org/licenses/>.
 //
 
 #include <src/pt2/mp2/mp2grad.h>
@@ -33,6 +32,7 @@
 #include <src/util/prim_op.h>
 #include <src/prop/multipole.h>
 #include <src/grad/gradeval.h>
+#include <src/prop/moprint.h>
 
 using namespace std;
 using namespace bagel;
@@ -48,7 +48,15 @@ void MP2Grad::compute() { }
 
 
 template<>
-shared_ptr<GradFile> GradEval<MP2Grad>::compute() {
+vector<double> GradEval<MP2Grad>::energyvec() const {
+  vector<double> out;
+  out.push_back(energy());
+  return out;
+}
+
+
+template<>
+shared_ptr<GradFile> GradEval<MP2Grad>::compute(const string jobtitle, shared_ptr<const GradInfo> gradinfo) {
   Timer time;
 
   const size_t ncore = task_->ncore();
@@ -264,7 +272,7 @@ shared_ptr<GradFile> GradEval<MP2Grad>::compute() {
 
   // solving CPHF (or Z-vector equation)
   auto cphf = make_shared<CPHF>(grad, ref_->eig(), halfjj, ref_);
-  shared_ptr<Matrix> dia = cphf->solve(task_->scf()->thresh_scf());
+  shared_ptr<Matrix> dia = cphf->solve(task_->scf()->thresh_scf(), gradinfo->maxziter());
   *dmp2 += *dia;
 
   // total density matrix
@@ -275,7 +283,13 @@ shared_ptr<GradFile> GradEval<MP2Grad>::compute() {
   auto dtotao = make_shared<Matrix>(*ref_->coeff() * *dtot ^ *ref_->coeff());
   {
     Dipole dipole(geom_, dtotao, "MP2 relaxed");
-    dipole.compute();
+    dipole_ = dipole.compute();
+  }
+
+  // print relaxed density if requested
+  if (gradinfo->density_print()) {
+    auto density_print = make_shared<MOPrint>(gradinfo->moprint_info(), geom_, ref_, /*is_density=*/true, make_shared<const ZMatrix>(*dtotao, 1.0));
+    density_print->compute();
   }
 
   ////////////////////////////////////////////////////////////////////////////
@@ -344,13 +358,13 @@ shared_ptr<GradFile> GradEval<MP2Grad>::compute() {
   cout << endl;
 
   // gradient evaluation
-  shared_ptr<GradFile> gradf = contract_gradient(dtotao, wdao, sep3, sep2, cgeom, sep32, sep22);
+  shared_ptr<GradFile> gradf = contract_gradient(dtotao, wdao, sep3, sep2, /*nacme = */nullptr, false, cgeom, sep32, sep22);
 
   time.tick_print("Gradient integrals contracted");
   cout << endl;
 
   // set proper energy_
-  energy_ = ref_->energy() + ecorr;
+  energy_ = ref_->energy(0) + ecorr;
 
   gradf->print();
   return gradf;

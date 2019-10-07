@@ -1,5 +1,5 @@
 //
-// BAGEL - Parallel electron correlation program.
+// BAGEL - Brilliantly Advanced General Electronic Structure Library
 // Filename: gsmallnaibatch.cc
 // Copyright (C) 2013 Toru Shiozaki
 //
@@ -8,19 +8,18 @@
 //
 // This file is part of the BAGEL package.
 //
-// The BAGEL package is free software; you can redistribute it and/or modify
-// it under the terms of the GNU Library General Public License as published by
-// the Free Software Foundation; either version 3, or (at your option)
-// any later version.
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
 //
-// The BAGEL package is distributed in the hope that it will be useful,
+// This program is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-// GNU Library General Public License for more details.
+// GNU General Public License for more details.
 //
-// You should have received a copy of the GNU Library General Public License
-// along with the BAGEL package; see COPYING.  If not, write to
-// the Free Software Foundation, 675 Mass Ave, Cambridge, MA 02139, USA.
+// You should have received a copy of the GNU General Public License
+// along with this program.  If not, see <http://www.gnu.org/licenses/>.
 //
 
 
@@ -31,7 +30,7 @@
 using namespace std;
 using namespace bagel;
 
-GSmallNAIBatch::GSmallNAIBatch(std::array<std::shared_ptr<const Shell>,2> info, std::shared_ptr<const Molecule> mol, const std::tuple<int,int> i)
+GSmallNAIBatch::GSmallNAIBatch(array<shared_ptr<const Shell>,2> info, shared_ptr<const Molecule> mol, const tuple<int,int> i)
     : mol_(mol), shells_(info), size_block_(shells_[0]->nbasis() * shells_[1]->nbasis()), iatom_(i) {
 
   assert(shells_[0]->relativistic() && shells_[1]->relativistic());
@@ -43,7 +42,7 @@ GSmallNAIBatch::GSmallNAIBatch(std::array<std::shared_ptr<const Shell>,2> info, 
   const size_t a1 = a1size_inc + a1size_dec;
 
   for (int i = 0; i != mol_->natom()*3; ++i)
-     data_.push_back(make_shared<Matrix>(a0, a1, true));
+    data_.push_back(make_shared<Matrix>(a0, a1, true));
 }
 
 
@@ -63,8 +62,11 @@ shared_ptr<GradFile> GSmallNAIBatch::compute_gradient(array<shared_ptr<const Mat
   int cnt = 0;
   for (int& i : xyz)
     for (int& j : xyz)
-      if (i <= j)
-        denc += *shells_[0]->small(i) * *d[cnt++] ^ *shells_[1]->small(j);
+      if (i <= j) {
+        if (d[cnt])
+          denc += *shells_[0]->small(i) * *d[cnt] ^ *shells_[1]->small(j);
+        ++cnt;
+      }
 
   for (int iatom = 0; iatom != mol_->natom(); ++iatom)
     for (int i = 0; i != 3; ++i)

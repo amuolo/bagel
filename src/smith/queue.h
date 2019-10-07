@@ -1,5 +1,5 @@
 //
-// BAGEL - Parallel electron correlation program.
+// BAGEL - Brilliantly Advanced General Electronic Structure Library
 // Filename: queue.h
 // Copyright (C) 2012 Toru Shiozaki
 //
@@ -8,19 +8,18 @@
 //
 // This file is part of the BAGEL package.
 //
-// The BAGEL package is free software; you can redistribute it and/or modify
-// it under the terms of the GNU Library General Public License as published by
-// the Free Software Foundation; either version 3, or (at your option)
-// any later version.
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
 //
-// The BAGEL package is distributed in the hope that it will be useful,
+// This program is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-// GNU Library General Public License for more details.
+// GNU General Public License for more details.
 //
-// You should have received a copy of the GNU Library General Public License
-// along with the BAGEL package; see COPYING.  If not, write to
-// the Free Software Foundation, 675 Mass Ave, Cambridge, MA 02139, USA.
+// You should have received a copy of the GNU General Public License
+// along with this program.  If not, see <http://www.gnu.org/licenses/>.
 //
 
 
@@ -29,6 +28,9 @@
 
 #ifndef __SRC_SMITH_QUEUE_H
 #define __SRC_SMITH_QUEUE_H
+
+#include <bagel_config.h>
+#ifdef COMPILE_SMITH
 
 #include <src/smith/task.h>
 #include <cassert>
@@ -46,24 +48,8 @@ class Queue {
   public:
     Queue() {}
     Queue(const std::list<std::shared_ptr<Task>>& d) : tasklist_(d) { }
-//  Queue(const std::list<std::shared_ptr<Task>>& d) : tasklist_(d) { std::random_shuffle(tasklist_.begin(), tasklist_.end()); }
 
-    // TODO parallel version to be implemented (need to WAIT!)
-    std::shared_ptr<Task> next_compute() {
-      auto i = tasklist_.begin();
-      for ( ; i != tasklist_.end(); ++i)
-        if ((*i)->ready()) break;
-
-      assert(i != tasklist_.end());
-      std::shared_ptr<Task> out = *i;
-      // execute
-      out->compute();
-      // delete dependency (to remove intermediate storages)
-      for (auto& j : tasklist_) j->delete_dep(out);
-      // delete this task from the queue
-      tasklist_.erase(i);
-      return out;
-    }
+    std::shared_ptr<Task> next_compute();
 
     void add_task(std::shared_ptr<Task> a) { tasklist_.push_back(a); }
 
@@ -82,4 +68,5 @@ class Queue {
 }
 }
 
+#endif
 #endif

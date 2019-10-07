@@ -1,33 +1,31 @@
 //
-// BAGEL - Parallel electron correlation program.
+// BAGEL - Brilliantly Advanced General Electronic Structure Library
 // Filename: asd.h
-// Copyright (C) 2012 Shane Parker
+// Copyright (C) 2012 Toru Shiozaki
 //
 // Author: Shane Parker <shane.parker@u.northwestern.edu>
 // Maintainer: NU theory
 //
 // This file is part of the BAGEL package.
 //
-// The BAGEL package is free software; you can redistribute it and/or modify
-// it under the terms of the GNU Library General Public License as published by
-// the Free Software Foundation; either version 3, or (at your option)
-// any later version.
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
 //
-// The BAGEL package is distributed in the hope that it will be useful,
+// This program is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-// GNU Library General Public License for more details.
+// GNU General Public License for more details.
 //
-// You should have received a copy of the GNU Library General Public License
-// along with the BAGEL package; see COPYING.  If not, write to
-// the Free Software Foundation, 675 Mass Ave, Cambridge, MA 02139, USA.
+// You should have received a copy of the GNU General Public License
+// along with this program.  If not, see <http://www.gnu.org/licenses/>.
 //
 
 #ifndef __ASD_ASD_H
 #define __ASD_ASD_H
 
 #include <src/asd/asd_base.h>
-#include <src/asd/dimer/dimer_prop.h>
 
 namespace bagel {
 
@@ -49,11 +47,18 @@ class ASD : public ASD_base {
     }
 
   public:
-    ASD(const std::shared_ptr<const PTree> input, std::shared_ptr<Dimer> dimer, std::shared_ptr<DCISpace> cispace);
+    ASD(const std::shared_ptr<const PTree> input, std::shared_ptr<Dimer> dimer, std::shared_ptr<DCISpace> cispace, bool compute_rdm = false);
 
     void compute() override;
 
   private:
+    void compute_rdm12(); // compute all states at once + averaged rdm
+
+    void compute_rdm12_monomer();
+    virtual std::tuple<std::shared_ptr<RDM<1>>,std::shared_ptr<RDM<2>>>
+      compute_rdm12_monomer(std::shared_ptr<const VecType> civec, const int i) const = 0;
+    virtual std::shared_ptr<VecType> contract_I(std::shared_ptr<const VecType> A, std::shared_ptr<Matrix> coef, int offset, int nstA, int nstB, int nstates) const = 0;
+    virtual std::shared_ptr<VecType> contract_J(std::shared_ptr<const VecType> B, std::shared_ptr<Matrix> coef, int offset, int nstA, int nstB, int nstates) const = 0;
 
     std::shared_ptr<Matrix> compute_1e_prop(std::shared_ptr<const Matrix> hAA, std::shared_ptr<const Matrix> hBB, std::shared_ptr<const Matrix> hAB, const double core) const;
     std::shared_ptr<Matrix> compute_diagonal_1e(const DSubSpace& subspace, const double* hAA, const double* hBB, const double diag) const;
@@ -72,6 +77,7 @@ class ASD : public ASD_base {
 #include <src/asd/asd_compute.hpp>
 #include <src/asd/asd_compute_diagonal.hpp>
 #include <src/asd/asd_init.hpp>
+#include <src/asd/asd_compute_rdm.hpp>
 #undef ASD_HEADERS
 
 }

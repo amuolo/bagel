@@ -1,5 +1,5 @@
 //
-// BAGEL - Parallel electron correlation program.
+// BAGEL - Brilliantly Advanced General Electronic Structure Library
 // Filename: geometry.h
 // Copyright (C) 2009 Toru Shiozaki
 //
@@ -8,19 +8,18 @@
 //
 // This file is part of the BAGEL package.
 //
-// The BAGEL package is free software; you can redistribute it and/or modify
-// it under the terms of the GNU Library General Public License as published by
-// the Free Software Foundation; either version 3, or (at your option)
-// any later version.
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
 //
-// The BAGEL package is distributed in the hope that it will be useful,
+// This program is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-// GNU Library General Public License for more details.
+// GNU General Public License for more details.
 //
-// You should have received a copy of the GNU Library General Public License
-// along with the BAGEL package; see COPYING.  If not, write to
-// the Free Software Foundation, 675 Mass Ave, Cambridge, MA 02139, USA.
+// You should have received a copy of the GNU General Public License
+// along with this program.  If not, see <http://www.gnu.org/licenses/>.
 //
 
 
@@ -30,6 +29,8 @@
 #include <src/df/df.h>
 #include <src/util/input/input.h>
 #include <src/molecule/molecule.h>
+#include <src/wfn/hcoreinfo.h>
+#include <src/wfn/fmminfo.h>
 
 namespace bagel {
 
@@ -56,6 +57,17 @@ class Geometry : public Molecule {
     // Magnetism-specific parameters
     bool magnetism_;
     bool london_;
+    bool use_finite_;
+
+    // Lattice parameters
+    bool do_periodic_df_;
+    std::vector<std::array<double, 3>> primitive_vectors_;
+
+    // Hcore Information
+    std::shared_ptr<const HcoreInfo> hcoreinfo_;
+
+    // FMM
+    std::shared_ptr<const FMMInfo> fmm_;
 
   private:
     // serialization
@@ -63,7 +75,8 @@ class Geometry : public Molecule {
 
     template<class Archive>
     void save(Archive& ar, const unsigned int) const {
-      ar << boost::serialization::base_object<Molecule>(*this) << schwarz_thresh_ << overlap_thresh_ << magnetism_ << london_;
+      ar << boost::serialization::base_object<Molecule>(*this);
+      ar << schwarz_thresh_ << overlap_thresh_ << magnetism_ << london_ << use_finite_ << do_periodic_df_ << hcoreinfo_ << fmm_;
       const size_t dfindex = !df_ ? 0 : std::hash<DFDist*>()(df_.get());
       ar << dfindex;
       const bool do_rel   = !!dfs_;
@@ -73,15 +86,18 @@ class Geometry : public Molecule {
 
     template<class Archive>
     void load(Archive& ar, const unsigned int) {
-      ar >> boost::serialization::base_object<Molecule>(*this) >> schwarz_thresh_ >> overlap_thresh_ >> magnetism_ >> london_;
+      ar >> boost::serialization::base_object<Molecule>(*this);
+      ar >> schwarz_thresh_ >> overlap_thresh_ >> magnetism_ >> london_ >> use_finite_ >> do_periodic_df_ >> hcoreinfo_ >> fmm_;
       size_t dfindex;
       ar >> dfindex;
       static std::map<size_t, std::weak_ptr<DFDist>> dfmap;
-      if (dfmap[dfindex].expired()) {
-        compute_integrals(overlap_thresh_);
-        dfmap[dfindex] = df_;
-      } else {
-        df_ = dfmap[dfindex].lock();
+      if (!fmm_) {
+        if (dfmap[dfindex].expired()) {
+          compute_integrals(overlap_thresh_);
+          dfmap[dfindex] = df_;
+        } else {
+          df_ = dfmap[dfindex].lock();
+        }
       }
 
       bool do_rel, do_gaunt;
@@ -102,10 +118,13 @@ class Geometry : public Molecule {
     Geometry(const Geometry& o, std::shared_ptr<const PTree> idata, const bool discard_prev_df = true);
     Geometry(const Geometry& o, std::shared_ptr<const Matrix> disp, std::shared_ptr<const PTree> geominfo, const bool rotate = true, const bool nodf = false);
     Geometry(const Geometry& o, const std::array<double,3> disp);
-    Geometry(std::vector<std::shared_ptr<const Geometry>>);
+    Geometry(std::vector<std::shared_ptr<const Geometry>>, const bool nodf = false);
+    Geometry(const Geometry& o, const std::string extent_type);
 
-    // Returns a constant
+    // Gradients of the nuclear-nuclear potential energy
     std::shared_ptr<const Matrix> compute_grad_vnuc() const;
+
+    // Thresholds
     double schwarz_thresh() const { return schwarz_thresh_; }
     double overlap_thresh() const { return overlap_thresh_; }
     bool london() const { return london_; }
@@ -133,6 +152,17 @@ class Geometry : public Molecule {
     void compute_relativistic_integrals(const bool do_gaunt);
     void discard_relativistic() const;
 
+    // Lattice
+    std::vector<std::array<double, 3>> primitive_vectors() const { return primitive_vectors_; }
+    std::array<double, 3> primitive_vectors(const int i) const { return primitive_vectors_[i]; };
+    bool do_periodic_df() const { return do_periodic_df_; }
+    std::shared_ptr<const Geometry> periodic(std::vector<std::shared_ptr<const Atom>> new_atoms) const;
+
+    // Hcore Information
+    std::shared_ptr<const HcoreInfo> hcoreinfo() const { return hcoreinfo_; }
+
+    // FMM
+    std::shared_ptr<const FMMInfo> fmm() const { return fmm_; }
 };
 
 }

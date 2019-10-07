@@ -1,5 +1,5 @@
 //
-// BAGEL - Parallel electron correlation program.
+// BAGEL - Brilliantly Advanced General Electronic Structure Library
 // Filename: test_zfci.cc
 // Copyright (C) 2013 Toru Shiozaki
 //
@@ -8,23 +8,22 @@
 //
 // This file is part of the BAGEL package.
 //
-// The BAGEL package is free software; you can redistribute it and/or modify
-// it under the terms of the GNU Library General Public License as published by
-// the Free Software Foundation; either version 3, or (at your option)
-// any later version.
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
 //
-// The BAGEL package is distributed in the hope that it will be useful,
+// This program is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-// GNU Library General Public License for more details.
+// GNU General Public License for more details.
 //
-// You should have received a copy of the GNU Library General Public License
-// along with the BAGEL package; see COPYING.  If not, write to
-// the Free Software Foundation, 675 Mass Ave, Cambridge, MA 02139, USA.
+// You should have received a copy of the GNU General Public License
+// along with this program.  If not, see <http://www.gnu.org/licenses/>.
 //
 
 
-#include <src/ci/zfci/zharrison.h>
+#include <src/ci/zfci/relfci.h>
 
 std::vector<double> relfci_energy(std::string inp) {
 
@@ -45,11 +44,11 @@ std::vector<double> relfci_energy(std::string inp) {
       geom = std::make_shared<Geometry>(itree);
 
     } else if (method == "dhf") {
-      auto scf = std::make_shared<Dirac>(itree, geom);
+      auto scf = std::make_shared<Dirac>(itree, geom, ref);
       scf->compute();
       ref = scf->conv_to_ref();
     } else if (method == "zfci") {
-      auto fci = std::make_shared<ZHarrison>(itree, geom, ref);
+      auto fci = std::make_shared<RelFCI>(itree, geom, ref);
       fci->compute();
       std::cout.rdbuf(backup_stream);
       return fci->energy();
@@ -67,20 +66,20 @@ std::vector<double> reference_relfci_energy() {
 
 std::vector<double> reference_relfci_energy2() {
   std::vector<double> out(1);
-  out[0] = -98.62253505;
+  out[0] = -98.62253450;
   return out;
 }
 
 std::vector<double> reference_relfci_energy3() {
   std::vector<double> out(1);
-  out[0] = -98.62292308;
+  out[0] = -98.62292281;
   return out;
 }
 
 std::vector<double> reference_relfci_energy4() {
   std::vector<double> out(2);
-  out[0] = -3187.40001447;
-  out[1] = -3184.76955058;
+  out[0] = -3189.56011628;
+  out[1] = -3185.82830884;
   return out;
 }
 
@@ -97,15 +96,18 @@ std::vector<double> reference_relfci_energy6() {
   return out;
 }
 
+std::vector<double> reference_relfci_energy7() {
+  std::vector<double> out(1);
+  out[0] = -100.06081004;
+  return out;
+}
+
 BOOST_AUTO_TEST_SUITE(TEST_RELFCI)
 
 BOOST_AUTO_TEST_CASE(ZHARRISON) {
   BOOST_CHECK(compare(relfci_energy("hf_sto3g_relfci_coulomb"), reference_relfci_energy()));
   BOOST_CHECK(compare(relfci_energy("hf_sto3g_relfci_gaunt"), reference_relfci_energy2()));
   BOOST_CHECK(compare(relfci_energy("hf_sto3g_relfci_breit"), reference_relfci_energy3()));
-  BOOST_CHECK(compare(relfci_energy("i_london_relfci_coulomb"), reference_relfci_energy4()));
-  BOOST_CHECK(compare(relfci_energy("h2_tzvpp_london_relfci_coulomb"), reference_relfci_energy5()));
-  BOOST_CHECK(compare(relfci_energy("ca_london_relfci_coulomb"), reference_relfci_energy6()));
 }
 
 BOOST_AUTO_TEST_SUITE_END()

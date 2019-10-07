@@ -1,26 +1,25 @@
 //
-// BAGEL - Parallel electron correlation program.
+// BAGEL - Brilliantly Advanced General Electronic Structure Library
 // Filename: moldenio.cc
-// Copyright (C) 2012 Shane Parker
+// Copyright (C) 2012 Toru Shiozaki
 //
 // Author: Shane Parker <shane.parker@u.northwestern.edu>
 // Maintainer: NU theory
 //
 // This file is part of the BAGEL package.
 //
-// The BAGEL package is free software; you can redistribute it and/or modify
-// it under the terms of the GNU Library General Public License as published by
-// the Free Software Foundation; either version 3, or (at your option)
-// any later version.
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
 //
-// The BAGEL package is distributed in the hope that it will be useful,
+// This program is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-// GNU Library General Public License for more details.
+// GNU General Public License for more details.
 //
-// You should have received a copy of the GNU Library General Public License
-// along with the BAGEL package; see COPYING.  If not, write to
-// the Free Software Foundation, 675 Mass Ave, Cambridge, MA 02139, USA.
+// You should have received a copy of the GNU General Public License
+// along with this program.  If not, see <http://www.gnu.org/licenses/>.
 //
 
 #include <src/util/io/moldenio.h>
@@ -69,8 +68,11 @@ void MoldenIO::const_maps() {
     vector<int> sph_d_order = { 3, 4, 1, 2, 0 };
     vector<int> sph_f_order = { 5, 6, 3, 4, 1, 2, 0 };
     vector<int> sph_g_order = { 7, 8, 5, 6, 3, 4, 1, 2, 0 };
+    vector<int> sph_h_order = { 9,10, 7, 8, 5, 6, 3, 4, 1, 2, 0 };
+    vector<int> sph_i_order = {11,12, 9,10, 7, 8, 5, 6, 3, 4, 1, 2, 0 };
+    vector<int> sph_j_order = {13,14,11,12, 9,10, 7, 8, 5, 6, 3, 4, 1, 2, 0 };
 
-    m2b_sph_ = vector<vector<int>>{sph_s_order, sph_p_order, sph_d_order, sph_f_order, sph_g_order};
+    m2b_sph_ = vector<vector<int>>{sph_s_order, sph_p_order, sph_d_order, sph_f_order, sph_g_order, sph_h_order, sph_i_order, sph_j_order};
   }
 
   /************************************************************
@@ -90,8 +92,11 @@ void MoldenIO::const_maps() {
     vector<int> sph_d_order = { 4, 2, 3, 0, 1 };
     vector<int> sph_f_order = { 6, 4, 5, 2, 3, 0, 1 };
     vector<int> sph_g_order = { 8, 6, 7, 4, 5, 2, 3, 0, 1};
+    vector<int> sph_h_order = {10, 8, 9, 6, 7, 4, 5, 2, 3, 0, 1};
+    vector<int> sph_i_order = {12,10,11, 8, 9, 6, 7, 4, 5, 2, 3, 0, 1};
+    vector<int> sph_j_order = {14,12,13,10,11, 8, 9, 6, 7, 4, 5, 2, 3, 0, 1};
 
-    b2m_sph_ = vector<vector<int>>{sph_s_order, sph_p_order, sph_d_order, sph_f_order, sph_g_order};
+    b2m_sph_ = vector<vector<int>>{sph_s_order, sph_p_order, sph_d_order, sph_f_order, sph_g_order, sph_h_order, sph_i_order, sph_j_order};
   }
 }
 

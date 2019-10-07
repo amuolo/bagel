@@ -1,5 +1,5 @@
 //
-// BAGEL - Parallel electron correlation program.
+// BAGEL - Brilliantly Advanced General Electronic Structure Library
 // Filename: scf_base.cc
 // Copyright (C) 2009 Toru Shiozaki
 //
@@ -8,24 +8,23 @@
 //
 // This file is part of the BAGEL package.
 //
-// The BAGEL package is free software; you can redistribute it and/or modify
-// it under the terms of the GNU Library General Public License as published by
-// the Free Software Foundation; either version 3, or (at your option)
-// any later version.
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
 //
-// The BAGEL package is distributed in the hope that it will be useful,
+// This program is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-// GNU Library General Public License for more details.
+// GNU General Public License for more details.
 //
-// You should have received a copy of the GNU Library General Public License
-// along with the BAGEL package; see COPYING.  If not, write to
-// the Free Software Foundation, 675 Mass Ave, Cambridge, MA 02139, USA.
+// You should have received a copy of the GNU General Public License
+// along with this program.  If not, see <http://www.gnu.org/licenses/>.
 //
 
 
 #include <src/scf/scf_base.h>
-#include <src/wfn/relreference.h>
+#include <src/wfn/zreference.h>
 #include <src/util/timer.h>
 #include <src/util/math/diis.h>
 #include <iostream>
@@ -38,18 +37,20 @@ using namespace bagel;
 
 
 template <typename MatType, typename OvlType, typename HcType, class Enable>
-SCF_base_<MatType, OvlType, HcType, Enable>::SCF_base_(const shared_ptr<const PTree> idat, const shared_ptr<const Geometry> geom, const shared_ptr<const Reference> re, const bool need_schwarz)
+SCF_base_<MatType, OvlType, HcType, Enable>::SCF_base_(shared_ptr<const PTree> idat, shared_ptr<const Geometry> geom, shared_ptr<const Reference> re, const bool need_schwarz)
  : Method(idat, geom, re), eig_(geom->nbasis()) {
 
   // if this is called by Opt
-  do_grad_ = idata_->get<bool>("gradient", false);
+  do_grad_ = idata_->get<bool>("_gradient", false);
   // enable restart capability
   restart_ = idata_->get<bool>("restart", false);
+  dofmm_   = !(geom_->fmm() == nullptr);
 
   Timer scfb;
-  overlap_ = make_shared<const OvlType>(geom);
+  overlap_ = make_shared<const OvlType>(geom_);
   scfb.tick_print("Overlap matrix");
-  hcore_ = make_shared<const HcType>(geom);
+
+  hcore_ = make_shared<HcType>(geom_, geom_->hcoreinfo());
   scfb.tick_print("Hcore matrix");
 
   max_iter_ = idata_->get<int>("maxiter", 100);
@@ -59,16 +60,22 @@ SCF_base_<MatType, OvlType, HcType, Enable>::SCF_base_(const shared_ptr<const PT
   thresh_overlap_ = idata_->get<double>("thresh_overlap", 1.0e-8);
   thresh_scf_ = idata_->get<double>("thresh", 1.0e-8);
   thresh_scf_ = idata_->get<double>("thresh_scf", thresh_scf_);
-  string dd = idata_->get<string>("diis", "gradient");
 
+  if (dofmm_) {
+    fmm_ = make_shared<const FMM>(idata_, geom);
+    const bool fmmk = idata_->get<bool>("FMM-K", false);
+    if (fmmk)
+      fmmK_ = make_shared<const FMM>(idata_, geom, true);
+  }
   multipole_print_ = idata_->get<int>("multipole", 1);
+  dma_print_ = idata_->get<int>("dma", 0);
 
   const int ncharge = idata_->get<int>("charge", 0);
-  const int nact    = idata_->get<int>("nact", (geom_->nele()-ncharge)%2);
-  nocc_ = idata_->get<int>("nocc", (geom_->nele()-ncharge+nact)/2);
-  noccB_ = nocc_ - nact;
+  const int nopen   = idata_->get<int>("nopen", (geom_->nele()-ncharge)%2);
+  nocc_ = (geom_->nele()-ncharge+nopen)/2;
+  noccB_ = nocc_ - nopen;
 
-  if (nocc_+noccB_ != geom_->nele()-ncharge) throw runtime_error("nocc and nact are not consistently specified");
+  if (nocc_+noccB_ != geom_->nele()-ncharge) throw runtime_error("nocc and nopen are not consistently specified");
 
   tildex_ = overlap_->tildex(thresh_overlap_);
 
@@ -96,15 +103,13 @@ void SCF_base_<MatType, OvlType, HcType, Enable>::init_schwarz() {
 // Specialized for GIAO
 template <>
 void SCF_base_<ZMatrix, ZOverlap, ZHcore, enable_if<true>::type>::get_coeff(const shared_ptr<const Reference> ref) {
-  auto cref = dynamic_pointer_cast<const RelReference>(ref);
+  auto cref = dynamic_pointer_cast<const ZReference>(ref);
   assert(cref);
-  if (cref->rel()) throw runtime_error("Invalid reference provided for RHF_London");
-  coeff_ = make_shared<ZCoeff>(*cref->relcoeff());
+  coeff_ = cref->zcoeff();
 }
 
-
-template class SCF_base_<Matrix, Overlap, Hcore>;
-template class SCF_base_<ZMatrix, ZOverlap, ZHcore>;
+template class bagel::SCF_base_<Matrix, Overlap, Hcore>;
+template class bagel::SCF_base_<ZMatrix, ZOverlap, ZHcore>;
 
 BOOST_CLASS_EXPORT_IMPLEMENT(SCF_base)
 BOOST_CLASS_EXPORT_IMPLEMENT(SCF_base_London)

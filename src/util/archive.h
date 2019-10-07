@@ -1,5 +1,5 @@
 //
-// BAGEL - Parallel electron correlation program.
+// BAGEL - Brilliantly Advanced General Electronic Structure Library
 // Filename: archive.h
 // Copyright (C) 2014 Toru Shiozaki
 //
@@ -8,19 +8,18 @@
 //
 // This file is part of the BAGEL package.
 //
-// The BAGEL package is free software; you can redistribute it and/or modify
-// it under the terms of the GNU Library General Public License as published by
-// the Free Software Foundation; either version 3, or (at your option)
-// any later version.
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
 //
-// The BAGEL package is distributed in the hope that it will be useful,
+// This program is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-// GNU Library General Public License for more details.
+// GNU General Public License for more details.
 //
-// You should have received a copy of the GNU Library General Public License
-// along with the BAGEL package; see COPYING.  If not, write to
-// the Free Software Foundation, 675 Mass Ave, Cambridge, MA 02139, USA.
+// You should have received a copy of the GNU General Public License
+// along with this program.  If not, see <http://www.gnu.org/licenses/>.
 //
 //
 
@@ -41,15 +40,18 @@ class OArchive {
     std::ofstream os_;
 
     using Ostream = boost::archive::binary_oarchive;
-    Ostream archive_;
+    std::shared_ptr<Ostream> archive_;
 
   public:
-    OArchive(std::string name) : filename_(name+".archive"), os_(filename_), archive_(os_) {
+    OArchive(std::string name) : filename_(name+".archive"), os_(filename_) {
+      if (!os_.is_open())
+        throw std::runtime_error("Error trying to create the file " + filename_ + ".  Possibly the target directory is not accessible.");
+      archive_ = std::make_shared<Ostream>(os_);
     }
 
     template<typename T>
     OArchive& operator<<(const T& val) {
-      archive_ << val;
+      *archive_ << val;
       return *this;
     }
 
@@ -64,17 +66,30 @@ class IArchive {
     std::ifstream is_;
 
     using Istream = boost::archive::binary_iarchive;
-    Istream archive_;
+    std::shared_ptr<Istream> archive_;
 
   public:
-    IArchive(std::string name) : filename_(name+".archive"), is_(filename_), archive_(is_) {
+    IArchive(std::string name) : filename_(name+".archive"), is_(filename_) {
       if (!is_.is_open())
-        throw std::runtime_error(name+".archive not found");
+        throw std::runtime_error("File not found: " + filename_);
+      archive_ = std::make_shared<Istream>(is_);
     }
 
     template<typename T>
     IArchive& operator>>(T& val) {
-      archive_ >> val;
+
+      try {
+        *archive_ >> val;
+
+      // just to make error messages more user-friendly
+      } catch (const std::exception& e) {
+        if (std::string(e.what()).find("input stream error") != std::string::npos) {
+          throw std::runtime_error("Boost failed when trying to load information from a binary archive.  This error may occur when reading files generated with a different version of BAGEL.");
+        } else {
+          throw;
+        }
+      }
+
       return *this;
     }
 

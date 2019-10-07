@@ -1,5 +1,5 @@
 //
-// BAGEL - Parallel electron correlation program.
+// BAGEL - Brilliantly Advanced General Electronic Structure Library
 // Filename: zmatrix.cc
 // Copyright (C) 2012 Toru Shiozaki
 //
@@ -8,19 +8,18 @@
 //
 // This file is part of the BAGEL package.
 //
-// The BAGEL package is free software; you can redistribute it and/or modify
-// it under the terms of the GNU Library General Public License as published by
-// the Free Software Foundation; either version 3, or (at your option)
-// any later version.
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
 //
-// The BAGEL package is distributed in the hope that it will be useful,
+// This program is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-// GNU Library General Public License for more details.
+// GNU General Public License for more details.
 //
-// You should have received a copy of the GNU Library General Public License
-// along with the BAGEL package; see COPYING.  If not, write to
-// the Free Software Foundation, 675 Mass Ave, Cambridge, MA 02139, USA.
+// You should have received a copy of the GNU General Public License
+// along with this program.  If not, see <http://www.gnu.org/licenses/>.
 //
 
 
@@ -37,39 +36,55 @@ using namespace bagel;
 
 BOOST_CLASS_EXPORT_IMPLEMENT(ZMatrix)
 
-ZMatrix::ZMatrix(const int n, const int m, const bool loc) : Matrix_base<complex<double>>(n, m, loc) {
+ZMatrix::ZMatrix(const int n, const int m, const bool loc) : Matrix_base<complex<double>>(n, m, loc), std::enable_shared_from_this<bagel::ZMatrix>() {
 }
 
 
-ZMatrix::ZMatrix(const ZMatrix& o) : Matrix_base<complex<double>>(o) {
+ZMatrix::ZMatrix(const ZMatrix& o) : Matrix_base<complex<double>>(o), std::enable_shared_from_this<bagel::ZMatrix>() {
 }
 
 
-ZMatrix::ZMatrix(const ZMatView& o) : Matrix_base<complex<double>>(o) {
+ZMatrix::ZMatrix(const ZMatView& o) : Matrix_base<complex<double>>(o), std::enable_shared_from_this<bagel::ZMatrix>() {
 }
 
 
-ZMatrix::ZMatrix(ZMatrix&& o) : Matrix_base<complex<double>>(move(o)) {
+ZMatrix::ZMatrix(ZMatrix&& o) : Matrix_base<complex<double>>(move(o)), std::enable_shared_from_this<bagel::ZMatrix>() {
 }
 
 
-ZMatrix::ZMatrix(const Matrix& r, const Matrix& i) : Matrix_base<complex<double>>(r.ndim(), r.mdim()) {
+ZMatrix::ZMatrix(const Matrix& r, const Matrix& i) : Matrix_base<complex<double>>(r.ndim(), r.mdim()), std::enable_shared_from_this<bagel::ZMatrix>() {
   assert(r.ndim() == i.ndim() && r.mdim() == i.mdim());
   add_real_block(complex<double>(1.0, 0.0), 0, 0, ndim(), mdim(), r);
   add_real_block(complex<double>(0.0, 1.0), 0, 0, ndim(), mdim(), i);
 }
 
 
-ZMatrix::ZMatrix(const Matrix& r, const complex<double> factor) : Matrix_base<complex<double>>(r.ndim(), r.mdim(), r.localized()) {
+ZMatrix::ZMatrix(const Matrix& r, const complex<double> factor) : Matrix_base<complex<double>>(r.ndim(), r.mdim(), r.localized()), std::enable_shared_from_this<bagel::ZMatrix>() {
   add_real_block(factor, 0, 0, ndim(), mdim(), r);
 }
 
 
 #ifdef HAVE_SCALAPACK
-ZMatrix::ZMatrix(const DistZMatrix& o) : Matrix_base<complex<double>>(o.ndim(), o.mdim()) {
+ZMatrix::ZMatrix(const DistZMatrix& o) : Matrix_base<complex<double>>(o.ndim(), o.mdim()), std::enable_shared_from_this<bagel::ZMatrix>() {
   setlocal_(o.local());
 }
 #endif
+
+
+ZMatView ZMatrix::slice(const int mstart, const int mend) {
+  assert(mstart >= 0 && mend <= mdim());
+  auto low = {0, mstart};
+  auto up  = {static_cast<int>(ndim()), mend};
+  return ZMatView(btas::make_rwview(this->range().slice(low, up), this->storage()), localized_);
+}
+
+
+const ZMatView ZMatrix::slice(const int mstart, const int mend) const {
+  assert(mstart >= 0 && mend <= mdim());
+  auto low = {0, mstart};
+  auto up  = {static_cast<int>(ndim()), mend};
+  return ZMatView(btas::make_rwview(this->range().slice(low, up), this->storage()), localized_);
+}
 
 
 ZMatrix ZMatrix::operator/(const ZMatrix& o) const {
@@ -94,12 +109,12 @@ void ZMatrix::diagonalize(VecView eig) {
   assert(eig.size() >= ndim());
 
   // assert that matrix is hermitian to ensure real eigenvalues
-  assert(is_hermitian(1.0e-10));
+//assert(is_hermitian(1.0e-10));
 
   const int n = ndim();
   int info;
 #ifdef HAVE_SCALAPACK
-  if (localized_  || n <= blocksize__) {
+  if (localized_  || n <= 10*blocksize__) {
 #endif
     unique_ptr<complex<double>[]> work(new complex<double>[n*6]);
     unique_ptr<double[]> rwork(new double[3*ndim()]);
@@ -210,16 +225,6 @@ shared_ptr<ZMatrix> ZMatrix::log(const int deg) const {
 }
 
 
-unique_ptr<complex<double>[]> ZMatrix::diag() const {
-  if (ndim() != mdim()) throw logic_error("illegal call of ZMatrix::diag()");
-  unique_ptr<complex<double>[]> out(new complex<double>[ndim()]);
-  for (int i = 0; i != ndim(); ++i) {
-    out[i] = element(i,i);
-  }
-  return move(out);
-}
-
-
 shared_ptr<ZMatrix> ZMatrix::transpose(const complex<double> factor) const {
   auto out = make_shared<ZMatrix>(mdim(), ndim(), localized_);
   blas::transpose(data(), ndim(), mdim(), out->data(), factor);
@@ -248,42 +253,10 @@ void ZMatrix::purify_unitary() {
 }
 
 
-void ZMatrix::purify_redrotation(const int nclosed, const int nact, const int nvirt) {
-
-#if 1
-  for (int g = 0; g != nclosed; ++g)
-    for (int h = 0; h != nclosed; ++h)
-      element(h,g)=0.0;
-  for (int g = 0; g != nact; ++g)
-    for (int h = 0; h != nact; ++h)
-      element(h+nclosed,g+nclosed)=0.0;
-  for (int g = 0; g != nvirt; ++g)
-    for (int h = 0; h != nvirt; ++h)
-      element(h+nclosed+nact,g+nclosed+nact)=0.0;
-  for (int i = 0; i != ndim(); ++i) {
-    for (int j = 0; j != i; ++j) {
-      const complex<double> ele = (element(j,i) - conj(element(i,j))) * 0.5;
-      element(j,i) = ele;
-      element(i,j) = - conj(ele);
-    }
-  }
-#endif
-
-}
-
-
-void ZMatrix::purify_idempotent(const ZMatrix& s) {
-  *this = *this * s * *this * 3.0 - *this * s * *this * s * *this * 2.0;
-}
-
-
 // in-place matrix inverse (practically we use buffer area)
 void ZMatrix::inverse() {
   assert(ndim() == mdim());
   const int n = ndim();
-#ifndef NDEBUG
-  shared_ptr<ZMatrix> ref = this->copy();
-#endif
   shared_ptr<ZMatrix> buf = this->clone();
   buf->unit();
 
@@ -300,9 +273,6 @@ void ZMatrix::inverse() {
 bool ZMatrix::inverse_half(const double thresh) {
   assert(ndim() == mdim());
   const int n = ndim();
-#ifndef NDEBUG
-  shared_ptr<ZMatrix> ref = this->copy();
-#endif
   VectorB vec(n);
   diagonalize(vec);
 
@@ -310,17 +280,16 @@ bool ZMatrix::inverse_half(const double thresh) {
     double s = vec(i) > thresh ? 1.0/std::sqrt(std::sqrt(vec(i))) : 0.0;
     for_each(element_ptr(0,i), element_ptr(0,i+1), [&s](complex<double>& a) { a *= s; });
   }
-
-#ifndef NDEBUG
-  for (int i = 0; i != n; ++i)
-    if (vec[i] < thresh) cout << " throwing out " << setprecision(20) << vec[i] << endl;
-#endif
-
   *this = *this ^ *this;
+  vector<double> rm;
+  for (int i = 0; i != n; ++i)
+    if (vec[i] < thresh) rm.push_back(vec[i]);
+  if (!rm.empty())
+    cout << "    - linear dependency detected: " << setw(4) << rm.size() << " / " << setw(4) << n <<
+            "    min eigenvalue: " << setw(14) << scientific << setprecision(4) << *min_element(rm.begin(), rm.end()) <<
+            "    max eigenvalue: " << setw(14) << scientific << setprecision(4) << *max_element(rm.begin(), rm.end()) << fixed << endl;
 
-  const bool lindep = std::any_of(vec.begin(), vec.end(), [&thresh] (const double& e) { return e < thresh; });
-
-  return !lindep;
+  return rm.empty();
 }
 
 
@@ -458,6 +427,52 @@ shared_ptr<const ZMatrix> ZMatrix::distmatrix() const {
   return out;
 }
 #endif
+
+
+void ZMatrix::print (const string tag, int len) const {
+  if (tag != "")
+    cout << endl << "  ++ " << tag << " ++" << endl << endl;
+
+  int len_n, len_m;
+
+  if (len == 0 || (len > mdim() && len > ndim())) {
+    len_n = ndim();
+    len_m = mdim();
+  } else {
+    len_n = len_m = len;
+  }
+
+  for (int i = 0; i != len_m / 6; ++i) {
+    cout << setw(6) << " ";
+    for (int k = 0; k != 6; ++k)
+      cout << setw(30) << i * 6 + k;
+    cout << endl;
+    for (int j = 0; j != len_n; ++j) {
+      cout << setw(6) << j;
+      for (int k = 0; k != 6; ++k)
+        cout << setw(30) << setprecision(10) << *element_ptr(j, i * 6 + k);
+      cout << endl;
+    }
+    cout << endl;
+  }
+
+  if (len_m % 6) {
+    int i = len_m / 6;
+    cout << setw(6) << " ";
+    for (int k = 0; k != len_m % 6; ++k)
+      cout << setw(30) << i * 6 + k;
+    cout << endl;
+
+    for (int j = 0; j != len_n; ++j) {
+      cout << setw(6) << j;
+      for (int k = 0; k != len_m % 6; ++k)
+        cout << setw(30) << setprecision(10) << *element_ptr(j, i * 6 + k);
+      cout << endl;
+    }
+    cout << endl;
+  }
+}
+
 
 
 shared_ptr<const ZMatrix> ZMatrix::form_density_rhf(const int n, const int offset, const complex<double> scale) const {

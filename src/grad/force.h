@@ -1,5 +1,5 @@
 //
-// BAGEL - Parallel electron correlation program.
+// BAGEL - Brilliantly Advanced General Electronic Structure Library
 // Filename: force.h
 // Copyright (C) 2015 Toru Shiozaki
 //
@@ -8,25 +8,26 @@
 //
 // This file is part of the BAGEL package.
 //
-// The BAGEL package is free software; you can redistribute it and/or modify
-// it under the terms of the GNU Library General Public License as published by
-// the Free Software Foundation; either version 3, or (at your option)
-// any later version.
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
 //
-// The BAGEL package is distributed in the hope that it will be useful,
+// This program is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-// GNU Library General Public License for more details.
+// GNU General Public License for more details.
 //
-// You should have received a copy of the GNU Library General Public License
-// along with the BAGEL package; see COPYING.  If not, write to
-// the Free Software Foundation, 675 Mass Ave, Cambridge, MA 02139, USA.
+// You should have received a copy of the GNU General Public License
+// along with this program.  If not, see <http://www.gnu.org/licenses/>.
 //
 
 #ifndef __SRC_GRAD_FORCE_H
 #define __SRC_GRAD_FORCE_H
 
 #include <src/wfn/reference.h>
+#include <src/util/muffle.h>
+#include <src/grad/gradinfo.h>
 
 namespace bagel {
 
@@ -36,13 +37,19 @@ class Force {
     std::shared_ptr<const Geometry> geom_;
     std::shared_ptr<const Reference> ref_;
 
+    bool numerical_;
+    std::vector<double> energy_;
+    std::vector<double> force_dipole_;
+
   public:
     Force(std::shared_ptr<const PTree>, std::shared_ptr<const Geometry>, std::shared_ptr<const Reference>);
 
-    void compute();
+    std::shared_ptr<GradFile> compute();
+    void force_export(const std::string jobtitle, std::shared_ptr<const GradInfo> gradinfo, const std::vector<double> energy, std::shared_ptr<const GradFile> out, const bool export_single);
+    const std::vector<double>& force_dipole() const { return force_dipole_; }
 
+    std::shared_ptr<const Reference> conv_to_ref() const { return ref_; }
 };
-
 
 }
 

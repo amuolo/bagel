@@ -1,5 +1,5 @@
 //
-// BAGEL - Parallel electron correlation program.
+// BAGEL - Brilliantly Advanced General Electronic Structure Library
 // Filename: gradtask.h
 // Copyright (C) 2013 Toru Shiozaki
 //
@@ -8,19 +8,18 @@
 //
 // This file is part of the BAGEL package.
 //
-// The BAGEL package is free software; you can redistribute it and/or modify
-// it under the terms of the GNU Library General Public License as published by
-// the Free Software Foundation; either version 3, or (at your option)
-// any later version.
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
 //
-// The BAGEL package is distributed in the hope that it will be useful,
+// This program is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-// GNU Library General Public License for more details.
+// GNU General Public License for more details.
 //
-// You should have received a copy of the GNU Library General Public License
-// along with the BAGEL package; see COPYING.  If not, write to
-// the Free Software Foundation, 675 Mass Ave, Cambridge, MA 02139, USA.
+// You should have received a copy of the GNU General Public License
+// along with this program.  If not, see <http://www.gnu.org/licenses/>.
 //
 
 #ifdef  GRADTASK_INCLUDE
@@ -98,6 +97,24 @@ class GradTask1 : public GradTask {
     void compute();
 };
 
+/// 2-index 1-electron derivative overlap
+class GradTask1s : public GradTask {
+  private:
+    std::array<std::shared_ptr<const Shell>, 2> shell_;
+    std::shared_ptr<const Matrix> den2_;
+    std::shared_ptr<const Matrix> den3_;
+    std::shared_ptr<const Matrix> eden_;
+
+    // implemented in gradeval_base.h
+    template<typename TBatch>
+    std::shared_ptr<GradFile> compute_os(std::shared_ptr<const Matrix> den) const;
+
+  public:
+    GradTask1s(const std::array<std::shared_ptr<const Shell>,2>& s, const std::vector<int>& a, const std::vector<int>& o,
+               const std::shared_ptr<const Matrix> vmat, const std::shared_ptr<const Matrix> kmat, const std::shared_ptr<const Matrix> omat, GradEval_base* p)
+      : GradTask(a, o, p), shell_(s), den2_(omat), den3_(kmat), eden_(vmat) { }
+    void compute();
+};
 
 /// 2-index 1-electron finite-nucleus NAI gradient integrals
 class GradTask1f : public GradTask {
@@ -153,6 +170,26 @@ class GradTask1rf : public GradTask {
     GradTask1rf(const std::array<std::shared_ptr<const Shell>,4>& s, const std::vector<int>& a, const std::vector<int>& o,
                 const std::array<std::shared_ptr<const Matrix>,6> d, GradEval_base* p)
       : GradTask(a, o, p), shell_(s), rden_(d) { }
+    void compute();
+};
+
+
+/// 1-electron DKH gradient integrals
+class GradTask1d : public GradTask {
+  private:
+    std::array<std::shared_ptr<const Shell>, 2> shell_;
+    std::array<std::shared_ptr<const Matrix>, 4> den_;
+
+    std::shared_ptr<GradFile> compute_nai() const;
+    std::shared_ptr<GradFile> compute_smallnai() const;
+    // implemented in gradeval_base.h
+    template<typename TBatch>
+    std::shared_ptr<GradFile> compute_os(std::shared_ptr<const Matrix>) const;
+
+  public:
+    GradTask1d(const std::array<std::shared_ptr<const Shell>,2>& s, const std::vector<int>& a, const std::vector<int>& o,
+              const std::array<std::shared_ptr<const Matrix>, 4> den, GradEval_base* p)
+      : GradTask(a, o, p), shell_(s), den_(den) { }
     void compute();
 };
 

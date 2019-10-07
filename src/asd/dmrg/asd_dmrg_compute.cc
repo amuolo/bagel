@@ -1,5 +1,5 @@
 //
-// BAGEL - Parallel electron correlation program.
+// BAGEL - Brilliantly Advanced General Electronic Structure Library
 // Filename: asd_dmrg_compute.cc
 // Copyright (C) 2014 Toru Shiozaki
 //
@@ -8,19 +8,18 @@
 //
 // This file is part of the BAGEL package.
 //
-// The BAGEL package is free software; you can redistribute it and/or modify
-// it under the terms of the GNU Library General Public License as published by
-// the Free Software Foundation; either version 3, or (at your option)
-// any later version.
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
 //
-// The BAGEL package is distributed in the hope that it will be useful,
+// This program is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-// GNU Library General Public License for more details.
+// GNU General Public License for more details.
 //
-// You should have received a copy of the GNU Library General Public License
-// along with the BAGEL package; see COPYING.  If not, write to
-// the Free Software Foundation, 675 Mass Ave, Cambridge, MA 02139, USA.
+// You should have received a copy of the GNU General Public License
+// along with this program.  If not, see <http://www.gnu.org/licenses/>.
 //
 
 #include <memory>
@@ -31,7 +30,7 @@
 using namespace std;
 using namespace bagel;
 
-void ASD_DMRG::compute() {
+void ASD_DMRG::sweep() {
   Timer dmrg_timer;
 
   shared_ptr<DMRG_Block1> left_block, right_block;
@@ -39,8 +38,7 @@ void ASD_DMRG::compute() {
   // Seed lattice
   cout << " ===== Start growing DMRG chain =====" << endl;
   {
-    shared_ptr<const Reference> ref = multisite_->build_reference(0, vector<bool>(nsites_, true));
-    // CI calculation on site 1 with all other sites at meanfield
+    shared_ptr<const Reference> ref = build_reference(0, vector<bool>(nsites_, true));
     left_block = compute_first_block(prepare_growing_input(0), ref);
     left_blocks_.push_back(left_block);
     cout << "  " << print_progress(0, ">>", "..") << setw(16) << dmrg_timer.tick() << endl;
@@ -50,7 +48,7 @@ void ASD_DMRG::compute() {
   for (int site = 1; site < nsites_-1; ++site) {
     vector<bool> meanfield(nsites_, true);
     fill_n(meanfield.begin(), site, false);
-    shared_ptr<const Reference> ref = multisite_->build_reference(site, meanfield);
+    shared_ptr<const Reference> ref = build_reference(site, meanfield);
     left_block = grow_block(prepare_growing_input(site), ref, left_block, site);
     left_blocks_.push_back(left_block);
     cout << "  " << print_progress(site, ">>", "..") << setw(16) << dmrg_timer.tick() << endl;
@@ -66,22 +64,22 @@ void ASD_DMRG::compute() {
   cout << setw(6) << "iter" << setw(6) << "state" << setw(22) << "sweep average" << setw(16) << "sweep range"
                                                                           << setw(16) << "dE average" <<  endl;
   for (int iter = 0; iter < maxiter_; ++iter) {
-  // Start sweeping backwards
+    // Start sweeping backwards
     for (int site = nsites_-1; site > 0; --site) {
       left_block = left_blocks_[site-1];
       right_block = (site == nsites_-1) ? nullptr : right_blocks_[nsites_ - site - 2];
-      shared_ptr<const Reference> ref = multisite_->build_reference(site, vector<bool>(nsites_, false));
+      shared_ptr<const Reference> ref = build_reference(site, vector<bool>(nsites_, false));
 
       right_block = decimate_block(prepare_sweeping_input(site), ref, right_block, left_block, site);
       right_blocks_[nsites_ - site - 1] = right_block;
       cout << "  " << print_progress(site, "<<", "<<") << setw(16) << dmrg_timer.tick() << endl;
     }
 
-  // Sweep forwards
+    // Sweep forwards
     for (int site = 0; site < nsites_-1; ++site) {
       left_block = (site == 0) ? nullptr : left_blocks_[site-1];
       right_block = right_blocks_[nsites_ - site - 2];
-      shared_ptr<const Reference> ref = multisite_->build_reference(site, vector<bool>(nsites_, false));
+      shared_ptr<const Reference> ref = build_reference(site, vector<bool>(nsites_, false));
 
       left_block = decimate_block(prepare_sweeping_input(site), ref, left_block, right_block, site);
       left_blocks_[site] = left_block;
@@ -166,7 +164,7 @@ void ASD_DMRG::down_sweep() {
       for (int site = nsites_-1; site > 0; --site) {
         left_block = left_blocks_[site-1];
         right_block = (site == nsites_-1) ? nullptr : right_blocks_[nsites_ - site - 2];
-        shared_ptr<const Reference> ref = multisite_->build_reference(site, vector<bool>(nsites_, false));
+        shared_ptr<const Reference> ref = build_reference(site, vector<bool>(nsites_, false));
 
         right_block = decimate_block(prepare_sweeping_input(site), ref, right_block, left_block, site);
         right_blocks_[nsites_ - site - 1] = right_block;
@@ -177,7 +175,7 @@ void ASD_DMRG::down_sweep() {
       for (int site = 0; site < nsites_-1; ++site) {
         left_block = (site == 0) ? nullptr : left_blocks_[site-1];
         right_block = right_blocks_[nsites_ - site - 2];
-        shared_ptr<const Reference> ref = multisite_->build_reference(site, vector<bool>(nsites_, false));
+        shared_ptr<const Reference> ref = build_reference(site, vector<bool>(nsites_, false));
 
         left_block = decimate_block(prepare_sweeping_input(site), ref, left_block, right_block, site);
         left_blocks_[site] = left_block;

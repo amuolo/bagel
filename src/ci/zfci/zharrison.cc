@@ -1,5 +1,5 @@
 //
-// BAGEL - Parallel electron correlation program.
+// BAGEL - Brilliantly Advanced General Electronic Structure Library
 // Filename: zharrison.cc
 // Copyright (C) 2013 Toru Shiozaki
 //
@@ -8,37 +8,34 @@
 //
 // This file is part of the BAGEL package.
 //
-// The BAGEL package is free software; you can redistribute it and/or modify
-// it under the terms of the GNU Library General Public License as published by
-// the Free Software Foundation; either version 3, or (at your option)
-// any later version.
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
 //
-// The BAGEL package is distributed in the hope that it will be useful,
+// This program is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-// GNU Library General Public License for more details.
+// GNU General Public License for more details.
 //
-// You should have received a copy of the GNU Library General Public License
-// along with the BAGEL package; see COPYING.  If not, write to
-// the Free Software Foundation, 675 Mass Ave, Cambridge, MA 02139, USA.
+// You should have received a copy of the GNU General Public License
+// along with this program.  If not, see <http://www.gnu.org/licenses/>.
 //
 
 #include <src/ci/zfci/zharrison.h>
 #include <src/ci/zfci/relspace.h>
 #include <src/util/math/comb.h>
-#include <src/multi/zcasscf/zcasscf.h>
 
 BOOST_CLASS_EXPORT_IMPLEMENT(bagel::ZHarrison)
 
 using namespace std;
 using namespace bagel;
 
-ZHarrison::ZHarrison(std::shared_ptr<const PTree> idat, shared_ptr<const Geometry> g, shared_ptr<const Reference> r, const int ncore, const int norb, const int nstate, std::shared_ptr<const ZMatrix> coeff_zcas, const bool restricted)
- : Method(idat, g, r), ncore_(ncore), norb_(norb), nstate_(nstate), restarted_(false) {
-  if (!ref_) throw runtime_error("ZFCI requires a reference object");
+ZHarrison::ZHarrison(shared_ptr<const PTree> idat, shared_ptr<const Geometry> g, shared_ptr<const Reference> r, const int ncore, const int norb,
+                     shared_ptr<const ZCoeff_Block> coeff_zcas, const bool store_c, const bool store_g)
+ : Method(idat, g, r), ncore_(ncore), norb_(norb), store_half_ints_(store_c), store_gaunt_half_ints_(store_g), restarted_(false) {
 
-  auto rr = dynamic_pointer_cast<const RelReference>(ref_);
-  if (!rr) throw runtime_error("ZFCI currently requires a relativistic reference object");
+  if (!ref_) throw runtime_error("ZHarrison requires a reference object");
 
   const bool frozen = idata_->get<bool>("frozen", false);
   max_iter_ = idata_->get<int>("maxiter", 100);
@@ -49,26 +46,20 @@ ZHarrison::ZHarrison(std::shared_ptr<const PTree> idat, shared_ptr<const Geometr
   print_thresh_ = idata_->get<double>("print_thresh", 0.05);
   restart_ = idata_->get<bool>("restart", false);
 
+  if (idata_->get<int>("nspin", -1) != -1 || idata_->get<int>("nstate", -1) != -1)
+    throw runtime_error("nspin and nstate are used as inputs only for non-relativistic FCI or CASSCF.  \
+                        For relativistic calculations, use the \"state\" input to give a vector of how many of each spin multiplet to compute.\
+                        (e.g., [3, 0, 1] for three singlets and one triplet.)");
+
   states_ = idata_->get_vector<int>("state", 0);
   nstate_ = 0;
   for (int i = 0; i != states_.size(); ++i)
     nstate_ += states_[i] * (i+1); // 2S+1 for 0, 1/2, 1, ...
 
-  // if nstate was specified on construction, it should match
-  assert(nstate == nstate_ || nstate == -1);
-
-  gaunt_ = idata_->get<bool>("gaunt", rr->gaunt());
-  breit_ = idata_->get<bool>("breit", rr->breit());
-  if (gaunt_ != rr->gaunt())
-    geom_ = geom_->relativistic(gaunt_);
-
-  // Invoke Kramer's symmetry for any case without magnetic field
-  tsymm_ = !geom_->magnetism();
-
   if (ncore_ < 0)
     ncore_ = idata_->get<int>("ncore", (frozen ? geom_->num_count_ncore_only()/2 : 0));
   if (norb_  < 0)
-    norb_ = idata_->get<int>("norb", (rr->relcoeff()->mdim()/2-ncore_));
+    norb_ = idata_->get<int>("norb", geom_->nbasis() - ncore_);
 
   // additional charge
   charge_ = idata_->get<int>("charge", 0);
@@ -82,66 +73,32 @@ ZHarrison::ZHarrison(std::shared_ptr<const PTree> idat, shared_ptr<const Geometr
 
   energy_.resize(nstate_);
 
-  print_header();
+  cout << "  ------------------------------" << endl;
+  cout << "  Spin-nonconserving complex FCI" << endl;
+  cout << "  ------------------------------" << endl << endl;
   cout << "    * nstate   : " << setw(6) << nstate_ << endl;
   cout << "    * nclosed  : " << setw(6) << ncore_ << endl;
   cout << "    * nact     : " << setw(6) << norb_ << endl;
+  cout << "    * nvirt    : " << setw(6) << (coeff_zcas ? coeff_zcas->mdim() : geom_->nbasis()-ncore_-norb_) << endl << endl;
 
   space_ = make_shared<RelSpace>(norb_, nele_);
   int_space_ = make_shared<RelSpace>(norb_, nele_-2, /*mute*/true, /*link up*/true);
 
-  // obtain the coefficient matrix in striped format
-  shared_ptr<const ZMatrix> coeff;
-  if (coeff_zcas == nullptr) {
-    if (restricted) throw runtime_error("Currently we should only have Kramers-adapted starting orbitals when coming from ZCASSCF");
-    // For FCI and CAS-CI, use a RelReference object
-    // Reorder as specified in the input so frontier orbitals contain the desired active space
-    const shared_ptr<const PTree> iactive = idata_->get_child_optional("active");
-    if (iactive) {
-      assert(iactive->size() == norb_);
-      set<int> active_indices;
-
-      // Subtracting one so that orbitals are input in 1-based format but are stored in C format (0-based)
-      for (auto& i : *iactive)
-        active_indices.insert(lexical_cast<int>(i->data()) - 1);
-      coeff = ZCASSCF::set_active(active_indices, rr->relcoeff_full(), ncore_, geom_->nele()-charge_, norb_, tsymm_);
-
-    } else {
-      coeff = rr->relcoeff_full();
-    }
-  } else {
-    // For ZCASSCF, just accept the coefficients given
-    coeff = coeff_zcas;
-  }
-
-  cout << "    * nvirt    : " << setw(6) << (coeff->mdim()/2-ncore_-norb_) << endl;
-  update(coeff, restricted);
-
-}
-
-
-void ZHarrison::print_header() const {
-  cout << "  ----------------------------" << endl;
-  cout << "  Relativistic FCI calculation" << endl;
-  cout << "  ----------------------------" << endl << endl;
-  cout << "    * Correlation of " << nele_ << " active electrons in " << norb_ << " orbitals."  << endl;
-  cout << "    * Time-reversal symmetry " << (tsymm_ ? "will be assumed." : "violation will be permitted.") << endl;
-  cout << "    * gaunt    : " << (gaunt_ ? "true" : "false") << endl;
-  cout << "    * breit    : " << (breit_ ? "true" : "false") << endl;
 }
 
 
 // generate initial vectors
-void ZHarrison::generate_guess(const int nelea, const int neleb, const int nstate, std::shared_ptr<RelZDvec> out, const int offset) {
+void ZHarrison::generate_guess(const int nelea, const int neleb, const int nstate, shared_ptr<RelZDvec> out, const int offset) {
   shared_ptr<const Determinants> cdet = space_->finddet(nelea, neleb);
   int ndet = nstate*10;
   int oindex = offset;
+  const bool spin_adapt = idata_->get<bool>("spin_adapt", true);
   while (oindex < offset+nstate) {
     vector<pair<bitset<nbit__>, bitset<nbit__>>> bits = detseeds(ndet, nelea, neleb);
 
     // Spin adapt detseeds
     oindex = offset;
-    vector<bitset<nbit__>> done;
+    vector<pair<bitset<nbit__>,bitset<nbit__>>> done;
     for (auto& it : bits) {
       bitset<nbit__> alpha = it.second;
       bitset<nbit__> beta = it.first;
@@ -151,16 +108,26 @@ void ZHarrison::generate_guess(const int nelea, const int neleb, const int nstat
       if (alpha.count() + beta.count() != nele_)
         throw logic_error("ZFCI::generate_guess produced an invalid determinant.  Check the number of states being requested.");
 
+      pair<bitset<nbit__>,bitset<nbit__>> config = spin_adapt ? make_pair(open_bit, alpha & beta) : it;
+      if (find(done.begin(), done.end(), config) != done.end()) continue;
+      done.push_back(config);
+
       // make sure that we have enough unpaired alpha
       const int unpairalpha = (alpha ^ (alpha & beta)).count();
       const int unpairbeta  = (beta ^ (alpha & beta)).count();
       if (unpairalpha-unpairbeta < nelea-neleb) continue;
 
-      if (find(done.begin(), done.end(), open_bit) != done.end()) continue;
+      //if (find(done.begin(), done.end(), open_bit) != done.end()) continue;
 
-      done.push_back(open_bit);
+      //done.push_back(open_bit);
       pair<vector<tuple<int, int, int>>, double> adapt;
-      adapt = space_->finddet(nelea, neleb)->spin_adapt(nelea-neleb, alpha, beta);
+      if (spin_adapt) {
+        adapt = space_->finddet(nelea, neleb)->spin_adapt(nelea-neleb, alpha, beta);
+      } else {
+        adapt.first = vector<tuple<int, int, int>>(1, make_tuple(space_->finddet(nelea, neleb)->lexical<1>(beta),
+                                                                 space_->finddet(nelea, neleb)->lexical<0>(alpha), 1));
+        adapt.second = 1.0;
+      }
 
       const double fac = adapt.second;
       for (auto& iter : adapt.first) {
@@ -186,7 +153,7 @@ void ZHarrison::generate_guess(const int nelea, const int neleb, const int nstat
 
 
 // returns seed determinants for initial guess
-vector<pair<bitset<nbit__> , bitset<nbit__>>> ZHarrison::detseeds(const int ndet, const int nelea, const int neleb) {
+vector<pair<bitset<nbit__> , bitset<nbit__>>> ZHarrison::detseeds(const int ndet, const int nelea, const int neleb) const {
   shared_ptr<const Determinants> cdet = space_->finddet(nelea, neleb);
 
   multimap<double, pair<bitset<nbit__>,bitset<nbit__>>> tmp;
@@ -213,8 +180,6 @@ vector<pair<bitset<nbit__> , bitset<nbit__>>> ZHarrison::detseeds(const int ndet
 
 void ZHarrison::compute() {
   Timer pdebug(2);
-
-  if (geom_->nirrep() > 1) throw runtime_error("ZFCI: C1 only at the moment.");
 
   if (!restarted_) {
     // Creating an initial CI vector
@@ -353,18 +318,35 @@ void ZHarrison::compute() {
 }
 
 
-shared_ptr<const ZMatrix> ZHarrison::swap_pos_neg(shared_ptr<const ZMatrix> coeffin) const {
-  auto out = coeffin->clone();
-  const int n = coeffin->ndim();
-  const int m = coeffin->mdim()/2;
-  assert(n % 4 == 0 && m % 2 == 0 && m * 2 == coeffin->mdim());
-  out->copy_block(0, 0, n, m, coeffin->get_submatrix(0, m, n, m));
-  out->copy_block(0, m, n, m, coeffin->get_submatrix(0, 0, n, m));
-  return out;
-}
-
-
 shared_ptr<const RelCIWfn> ZHarrison::conv_to_ciwfn() const {
   using PairType = pair<shared_ptr<const RelSpace>,shared_ptr<const RelSpace>>;
   return make_shared<RelCIWfn>(geom_, ncore_, norb_, nstate_, energy_, cc_, make_shared<PairType>(make_pair(space_, int_space_)));
+}
+
+
+// Rotate RDMs using a given unitary matrix
+void ZHarrison::rotate_rdms(shared_ptr<const ZMatrix> trans) {
+  // update rdm1_av_expanded_
+  {
+    ZMatrix tmp(norb_*2, norb_*2);
+    copy_n(rdm1_av_expanded_->data(), tmp.size(), tmp.data());
+    tmp = *trans % tmp * *trans;
+    copy_n(tmp.data(), tmp.size(), rdm1_av_expanded_->data());
+  }
+  // update rdm2_av_expanded_
+  {
+    shared_ptr<ZRDM<2>> buf = rdm2_av_expanded_->clone();
+    shared_ptr<const ZMatrix> trans_conjg = trans->get_conjg();
+    const int ndim  = norb_*2;
+    const int ndim2 = ndim*ndim;;
+    auto half_trans = [&](shared_ptr<const ZRDM<2>> a, shared_ptr<ZRDM<2>> b, shared_ptr<ZRDM<2>> c) {
+      zgemm3m_("N", "N", ndim2*ndim, ndim, ndim, 1.0, a->data(), ndim2*ndim, trans->data(), ndim, 0.0, b->data(), ndim2*ndim);
+      for (int i = 0; i != ndim; ++i)
+        zgemm3m_("N", "N", ndim2, ndim, ndim, 1.0, b->data()+i*ndim2*ndim, ndim2, trans_conjg->data(), ndim, 0.0, c->data()+i*ndim2*ndim, ndim2);
+    };
+    half_trans(rdm2_av_expanded_, buf, rdm2_av_expanded_);
+    blas::transpose(rdm2_av_expanded_->data(), ndim2, ndim2, buf->data());
+    half_trans(buf, rdm2_av_expanded_, buf);
+    blas::transpose(buf->data(), ndim2, ndim2, rdm2_av_expanded_->data());
+  }
 }

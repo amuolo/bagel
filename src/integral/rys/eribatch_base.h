@@ -1,5 +1,5 @@
 //
-// BAGEL - Parallel electron correlation program.
+// BAGEL - Brilliantly Advanced General Electronic Structure Library
 // Filename: eribatch_base.h
 // Copyright (C) 2012 Toru Shiozaki
 //
@@ -8,19 +8,18 @@
 //
 // This file is part of the BAGEL package.
 //
-// The BAGEL package is free software; you can redistribute it and/or modify
-// it under the terms of the GNU Library General Public License as published by
-// the Free Software Foundation; either version 3, or (at your option)
-// any later version.
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
 //
-// The BAGEL package is distributed in the hope that it will be useful,
+// This program is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-// GNU Library General Public License for more details.
+// GNU General Public License for more details.
 //
-// You should have received a copy of the GNU Library General Public License
-// along with the BAGEL package; see COPYING.  If not, write to
-// the Free Software Foundation, 675 Mass Ave, Cambridge, MA 02139, USA.
+// You should have received a copy of the GNU General Public License
+// along with this program.  If not, see <http://www.gnu.org/licenses/>.
 //
 
 
@@ -35,9 +34,7 @@ namespace bagel {
 
 template <typename DataType, Int_t IntType = Int_t::Standard>
 class ERIBatch_Base : public RysIntegral<DataType,IntType> {
-
   protected:
-
     // a hack for screening of three-center integrals
     static double rnd(const double& a) { return (a > 0.0) ? a : 1.0; };
 
@@ -54,32 +51,7 @@ class ERIBatch_Base : public RysIntegral<DataType,IntType> {
     void allocate_data(const int asize_final, const int csize_final, const int asize_final_sph, const int csize_final_sph) override;
 
   public:
-
-    ERIBatch_Base(const std::array<std::shared_ptr<const Shell>,4>& o, const int deriv, const int breit = 0,
-              std::shared_ptr<StackMem> stack = nullptr) : RysIntegral<DataType, IntType>(o, stack) {
-
-      breit_ = breit;
-      deriv_rank_ = deriv;
-
-      // determines if we want to swap shells
-      this->set_swap_info(true);
-
-      // stores AB and CD
-      this->set_ab_cd();
-
-      // set primsize_ and contsize_, as well as relevant members
-      this->set_prim_contsizes();
-
-      // sets angular info
-      int asize_final, csize_final, asize_final_sph, csize_final_sph;
-      std::tie(asize_final, csize_final, asize_final_sph, csize_final_sph) = this->set_angular_info();
-
-      // allocate
-      allocate_data(asize_final, csize_final, asize_final_sph, csize_final_sph);
-      this->allocate_arrays(primsize_);
-
-    }
-
+    ERIBatch_Base(const std::array<std::shared_ptr<const Shell>,4>& o, const int deriv, const int breit = 0, std::shared_ptr<StackMem> stack = nullptr);
 
   protected:
     using RysIntegral<DataType,IntType>::basisinfo_;
@@ -119,10 +91,6 @@ class ERIBatch_Base : public RysIntegral<DataType,IntType> {
 using ERIBatch_base = ERIBatch_Base<double, Int_t::Standard>;
 
 }
-
-#define ERIBATCH_BASE_HEADERS
-#include <src/integral/rys/eribatch_base_impl.hpp>
-#undef ERIBATCH_BASE_HEADERS
 
 extern template class bagel::ERIBatch_Base<double,bagel::Int_t::Standard>;
 extern template class bagel::ERIBatch_Base<std::complex<double>,bagel::Int_t::London>;

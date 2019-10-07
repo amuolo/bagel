@@ -1,5 +1,5 @@
 //
-// BAGEL - Parallel electron correlation program.
+// BAGEL - Brilliantly Advanced General Electronic Structure Library
 // Filename: gmcompute.cc
 // Copyright (C) 2013 Toru Shiozaki
 //
@@ -8,19 +8,18 @@
 //
 // This file is part of the BAGEL package.
 //
-// The BAGEL package is free software; you can redistribute it and/or modify
-// it under the terms of the GNU Library General Public License as published by
-// the Free Software Foundation; either version 3, or (at your option)
-// any later version.
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
 //
-// The BAGEL package is distributed in the hope that it will be useful,
+// This program is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-// GNU Library General Public License for more details.
+// GNU General Public License for more details.
 //
-// You should have received a copy of the GNU Library General Public License
-// along with the BAGEL package; see COPYING.  If not, write to
-// the Free Software Foundation, 675 Mass Ave, Cambridge, MA 02139, USA.
+// You should have received a copy of the GNU General Public License
+// along with this program.  If not, see <http://www.gnu.org/licenses/>.
 //
 
 
@@ -74,11 +73,11 @@ void GMomentBatch::compute() {
   copy_n(data_+size_block_*4, size_block_, data_+size_block_*7); //yz
   copy_n(data_+size_block_*4, size_block_, data_+size_block_*5); //yz
   copy_n(data_+size_block_*3, size_block_, data_+size_block_*4); //yy
-  copy_n(data_+size_block_*2, size_block_, data_+size_block_*6); //xz 
-//copy_n(data_+size_block_*2, size_block_, data_+size_block_*2); //xz 
-  copy_n(data_+size_block_*1, size_block_, data_+size_block_*3); //xy 
-//copy_n(data_+size_block_*1, size_block_, data_+size_block_*1); //xy 
-//copy_n(data_+size_block_*0, size_block_, data_+size_block_*0); //xx 
+  copy_n(data_+size_block_*2, size_block_, data_+size_block_*6); //xz
+//copy_n(data_+size_block_*2, size_block_, data_+size_block_*2); //xz
+  copy_n(data_+size_block_*1, size_block_, data_+size_block_*3); //xy
+//copy_n(data_+size_block_*1, size_block_, data_+size_block_*1); //xy
+//copy_n(data_+size_block_*0, size_block_, data_+size_block_*0); //xx
 
   // derivative with respect to the second center
   fill_n(data_+size_block_*9, size_block_*9, 0.0);

@@ -1,5 +1,5 @@
 //
-// BAGEL - Parallel electron correlation program.
+// BAGEL - Brilliantly Advanced General Electronic Structure Library
 // Filename: main.cc
 // Copyright (C) 2009 Toru Shiozaki
 //
@@ -8,19 +8,18 @@
 //
 // This file is part of the BAGEL package.
 //
-// The BAGEL package is free software; you can redistribute it and/or modify
-// it under the terms of the GNU Library General Public License as published by
-// the Free Software Foundation; either version 3, or (at your option)
-// any later version.
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
 //
-// The BAGEL package is distributed in the hope that it will be useful,
+// This program is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-// GNU Library General Public License for more details.
+// GNU General Public License for more details.
 //
-// You should have received a copy of the GNU Library General Public License
-// along with the BAGEL package; see COPYING.  If not, write to
-// the Free Software Foundation, 675 Mass Ave, Cambridge, MA 02139, USA.
+// You should have received a copy of the GNU General Public License
+// along with this program.  If not, see <http://www.gnu.org/licenses/>.
 //
 
 
@@ -50,11 +49,15 @@ int main() {
       if (a == 10) astr = lexical_cast<string>("a");
       if (a == 11) astr = lexical_cast<string>("b");
       if (a == 12) astr = lexical_cast<string>("c");
+      if (a == 13) astr = lexical_cast<string>("d");
+      if (a == 14) astr = lexical_cast<string>("e");
       string nstr;
       if (n < 10) nstr = lexical_cast<string>(n);
       if (n == 10) nstr = lexical_cast<string>("a");
       if (n == 11) nstr = lexical_cast<string>("b");
       if (n == 12) nstr = lexical_cast<string>("c");
+      if (n == 13) nstr = lexical_cast<string>("d");
+      if (n == 14) nstr = lexical_cast<string>("e");
 
       string n0 = nstr + lexical_cast<string>(0);
       string ab = astr + lexical_cast<string>(b);
@@ -90,7 +93,7 @@ int main() {
       string filename = "_hrr_" + n0 + "_" + ab + ".cc";
       out +="\
 //\n\
-// BAGEL - Parallel electron correlation program.\n\
+// BAGEL - Brilliantly Advanced General Electronic Structure Library\n\
 // Filename: " + filename + "\n\
 // Copyright (C) 2009 Toru Shiozaki\n\
 //\n\
@@ -99,21 +102,25 @@ int main() {
 //\n\
 // This file is part of the BAGEL package.\n\
 //\n\
-// The BAGEL package is free software; you can redistribute it and/or modify\n\
-// it under the terms of the GNU Library General Public License as published by\n\
-// the Free Software Foundation; either version 3, or (at your option)\n\
-// any later version.\n\
+// This program is free software: you can redistribute it and/or modify\n\
+// it under the terms of the GNU General Public License as published by\n\
+// the Free Software Foundation, either version 3 of the License, or\n\
+// (at your option) any later version.\n\
 //\n\
-// The BAGEL package is distributed in the hope that it will be useful,\n\
+// This program is distributed in the hope that it will be useful,\n\
 // but WITHOUT ANY WARRANTY; without even the implied warranty of\n\
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the\n\
-// GNU Library General Public License for more details.\n\
+// GNU General Public License for more details.\n\
 //\n\
-// You should have received a copy of the GNU Library General Public License\n\
-// along with the BAGEL package; see COPYING.  If not, write to\n\
-// the Free Software Foundation, 675 Mass Ave, Cambridge, MA 02139, USA.\n\
+// You should have received a copy of the GNU General Public License\n\
+// along with this program.  If not, see <http://www.gnu.org/licenses/>.\n\
 //\n\
-\n\
+\n";
+      if (a == 7 || b == 7) {
+        out += "\
+#ifdef COMPILE_J_ORB\n";
+      }
+      out +="\
 #include <src/integral/hrrlist.h>\n\
 #include <array>\n\
 #include <algorithm>\n\
@@ -236,6 +243,10 @@ void " + classname + "::perform_HRR_" + n0 + "_" + ab + "(const int nloop, const
       out += function("double", "HRRList");
       out += "\n\n";
       out += function("complex<double>", "CHRRList");
+      if (a == 7 || b == 7) {
+        out += "\
+#endif\n";
+      }
       ofstream ofs;
       ofs.open(filename.c_str());
       ofs << out << endl;

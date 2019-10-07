@@ -1,5 +1,5 @@
 //
-// BAGEL - Parallel electron correlation program.
+// BAGEL - Brilliantly Advanced General Electronic Structure Library
 // Filename: main.cc
 // Copyright (C) 2009 Toru Shiozaki
 //
@@ -8,229 +8,59 @@
 //
 // This file is part of the BAGEL package.
 //
-// The BAGEL package is free software; you can redistribute it and/or modify
-// it under the terms of the GNU Library General Public License as published by
-// the Free Software Foundation; either version 3, or (at your option)
-// any later version.
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
 //
-// The BAGEL package is distributed in the hope that it will be useful,
+// This program is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-// GNU Library General Public License for more details.
+// GNU General Public License for more details.
 //
-// You should have received a copy of the GNU Library General Public License
-// along with the BAGEL package; see COPYING.  If not, write to
-// the Free Software Foundation, 675 Mass Ave, Cambridge, MA 02139, USA.
+// You should have received a copy of the GNU General Public License
+// along with this program.  If not, see <http://www.gnu.org/licenses/>.
 //
 
+#include <iostream>
+#include <string>
+#include <src/bagel.h>
 #include <src/global.h>
-#include <src/pt2/mp2/mp2grad.h>
-#include <src/grad/force.h>
-#include <src/opt/optimize.h>
-#include <src/wfn/localization.h>
-#include <src/asd/construct_asd.h>
-#include <src/asd/dmrg/rasd.h>
-#include <src/asd/multisite/multisite.h>
-#include <src/util/archive.h>
-#include <src/util/io/moldenout.h>
-
-// debugging
-extern void test_solvers(std::shared_ptr<bagel::Geometry>);
-extern void test_mp2f12();
-
-// function (TODO will be moved to an appropriate place)
+#include <src/util/exception.h>
+#include <src/util/parallel/mpi_interface.h>
+#include <src/util/parallel/resources.h>
 
 using namespace std;
 using namespace bagel;
 
 int main(int argc, char** argv) {
-
-  static_variables();
-  print_header();
-
   try {
-
-    const bool input_provided = argc == 2;
-    if (!input_provided) {
+    if (argc == 2) {
+      const string input = argv[1];
+      run_bagel_from_input(input);
+    } else if (argc == 3 && string(argv[1]) == "-i") {
+      const string input = argv[2];
+      run_bagel_from_json(input);
+    } else {
       throw runtime_error("no input file provided");
     }
-    const string input = argv[1];
-
-    auto idata = make_shared<const PTree>(input);
-
-    shared_ptr<Method> method;
-    shared_ptr<Geometry> geom;
-    shared_ptr<const Reference> ref;
-    shared_ptr<Dimer> dimer;
-    shared_ptr<MultiSite> multisite;
-
-    map<string, shared_ptr<const void>> saved;
-    bool dodf = true;
-
-    // timer for each method
-    Timer timer(-1);
-
-    shared_ptr<const PTree> keys = idata->get_child("bagel");
-
-    for (auto& itree : *keys) {
-
-      const string title = to_lower(itree->get<string>("title", ""));
-      if (title.empty()) throw runtime_error("title is missing in one of the input blocks");
-
-      if (title == "molecule") {
-        geom = geom ? make_shared<Geometry>(*geom, itree) : make_shared<Geometry>(itree);
-        if (itree->get<bool>("restart", false))
-          ref.reset();
-        if (ref) ref = ref->project_coeff(geom);
-      } else {
-        if (!geom) throw runtime_error("molecule block is missing");
-        if (!itree->get<bool>("df",true)) dodf = false;
-        if (dodf && !geom->df()) throw runtime_error("It seems that DF basis was not specified in molecule block");
-      }
-
-      if ((title == "smith" || title == "relsmith" || title == "fci") && ref == nullptr)
-        throw runtime_error(title + " needs a reference");
-
-#ifndef DISABLE_SERIALIZATION
-      if (itree->get<bool>("load_ref", false)) {
-        const string name = itree->get<string>("ref_in", "");
-        if (name == "") throw runtime_error("Please provide a filename for the Reference object to be read.");
-        IArchive archive(name);
-        shared_ptr<Reference> ptr;
-        archive >> ptr;
-        ref = shared_ptr<Reference>(ptr);
-      }
-#endif
-
-      // most methods are constructed here
-      method = construct_method(title, itree, geom, ref);
-
-#ifndef DISABLE_SERIALIZATION
-      if (title == "continue") {
-        IArchive archive(itree->get<string>("archive"));
-        Method* ptr;
-        archive >> ptr;
-        method = shared_ptr<Method>(ptr);
-      }
-#endif
-
-      if (method) {
-
-        method->compute();
-        ref = method->conv_to_ref();
-#ifndef DISABLE_SERIALIZATION
-        if (itree->get<bool>("save_ref", false)) {
-          const string name = itree->get<string>("ref_out", "reference");
-          OArchive archive(name);
-          archive << ref;
-        }
-#endif
-
-      } else if (title == "optimize") {
-
-        auto opt = make_shared<Optimize>(itree, geom, ref);
-        opt->compute();
-
-      } else if (title == "force") {
-
-        auto opt = make_shared<Force>(itree, geom, ref);
-        opt->compute();
-
-      } else if (title == "dimerize") { // dimerize forms the dimer object, does a scf calculation, and then localizes
-        const string form = itree->get<string>("form", "displace");
-        if (form == "d" || form == "disp" || form == "displace") {
-          if (static_cast<bool>(ref))
-            dimer = make_shared<Dimer>(itree, ref);
-          else
-            throw runtime_error("dimerize needs a reference calculation (for now)");
-        }
-        else if (form == "r" || form == "refs") {
-          vector<shared_ptr<const Reference>> dimer_refs;
-          auto units = itree->get_vector<string>("refs", 2);
-          for (auto& ikey : units) {
-            auto tmp = saved.find(ikey);
-            if (tmp == saved.end()) throw runtime_error(string("No reference found with name: ") + ikey);
-            else dimer_refs.push_back(static_pointer_cast<const Reference>(tmp->second));
-          }
-
-          dimer = make_shared<Dimer>(itree, dimer_refs.at(0), dimer_refs.at(1));
-        }
-
-        dimer->scf(itree);
-
-        *geom = *dimer->sgeom();
-        ref = dimer->sref();
-      } else if (title == "asd") {
-          auto asd = construct_ASD(itree, dimer);
-          asd->compute();
-      } else if (title == "multisite") {
-          vector<shared_ptr<const Reference>> site_refs;
-          auto sitenames = itree->get_vector<string>("refs");
-          for (auto& s : sitenames)
-            site_refs.push_back(static_pointer_cast<const Reference>(saved.at(s)));
-          auto ms = make_shared<MultiSite>(itree, site_refs);
-          ms->scf(itree);
-          multisite = ms;
-          ref = ms->conv_to_ref();
-          *geom = *ref->geom();
-      } else if (title == "asd_dmrg") {
-          if (!multisite)
-            throw runtime_error("multisite must be called before asd_dmrg");
-          auto asd = make_shared<RASD>(itree, multisite);
-          asd->compute();
-      } else if (title == "localize") {
-        if (ref == nullptr) throw runtime_error("Localize needs a reference");
-
-        string localizemethod = itree->get<string>("algorithm", "pm");
-        shared_ptr<OrbitalLocalization> localization;
-        if (localizemethod == "region") {
-          localization = make_shared<RegionLocalization>(itree, ref);
-        }
-        else if (localizemethod == "pm" || localizemethod == "pipek" || localizemethod == "mezey" || localizemethod == "pipek-mezey")
-          localization = make_shared<PMLocalization>(itree, ref);
-        else throw runtime_error("Unrecognized orbital localization method");
-
-        shared_ptr<const Coeff> new_coeff = make_shared<const Coeff>(*localization->localize());
-        ref = make_shared<const Reference>(*ref, new_coeff);
-
-      } else if (title == "print") {
-
-        const bool orbitals = itree->get<bool>("orbitals", false);
-        const string out_file = itree->get<string>("file", "out.molden");
-
-        if (mpi__->rank() == 0) {
-          MoldenOut mfs(out_file);
-          mfs << geom;
-          if (orbitals) mfs << ref;
-        }
-
-      } else {
-        if (title != "molecule")
-          throw runtime_error("unknown method");
-      }
-
-      // Save functionality
-      string saveref = itree->get<string>("saveref", "");
-      if (saveref != "") { saved.insert(make_pair(saveref, static_pointer_cast<const void>(ref))); }
-
-      cout << endl;
-      mpi__->barrier();
-      timer.tick_print("Method: " + title);
-      cout << endl;
-
-    }
-
+  } catch (const Termination& e) {
+    cout << "  -- Termination requested --" << endl;
+    cout << "  message: " << e.what() << endl;
     print_footer();
-
-  } catch (const exception &e) {
-    resources__->proc()->cout_on();
-    cout << "  ERROR ON RANK " << mpi__->rank() << ": EXCEPTION RAISED:" << e.what() << endl;
-    resources__->proc()->cout_off();
-    throw;
+  } catch (const exception& e) {
+    if (resources__)
+      resources__->proc()->cout_on();
+    if (mpi__ && mpi__->size() > 1)
+      cout << "  ERROR ON MPI PROCESS " << mpi__->rank() << ": EXCEPTION RAISED:  " << e.what() << endl;
+    else
+      cout << "  ERROR: EXCEPTION RAISED:  " << e.what() << endl;
+    if (resources__)
+      resources__->proc()->cout_off();
   } catch (...) {
     throw;
   }
-
   return 0;
 }
+
 

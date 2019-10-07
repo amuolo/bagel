@@ -1,5 +1,5 @@
 //
-// BAGEL - Parallel electron correlation program.
+// BAGEL - Brilliantly Advanced General Electronic Structure Library
 // Filename: test_opt.cc
 // Copyright (C) 2012 Toru Shiozaki
 //
@@ -8,19 +8,18 @@
 //
 // This file is part of the BAGEL package.
 //
-// The BAGEL package is free software; you can redistribute it and/or modify
-// it under the terms of the GNU Library General Public License as published by
-// the Free Software Foundation; either version 3, or (at your option)
-// any later version.
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
 //
-// The BAGEL package is distributed in the hope that it will be useful,
+// This program is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-// GNU Library General Public License for more details.
+// GNU General Public License for more details.
 //
-// You should have received a copy of the GNU Library General Public License
-// along with the BAGEL package; see COPYING.  If not, write to
-// the Free Software Foundation, 675 Mass Ave, Cambridge, MA 02139, USA.
+// You should have received a copy of the GNU General Public License
+// along with this program.  If not, see <http://www.gnu.org/licenses/>.
 //
 
 #include <src/opt/optimize.h>
@@ -38,6 +37,8 @@ std::vector<double> run_opt(std::string filename) {
   std::shared_ptr<const Geometry> geom;
   std::shared_ptr<const Reference> ref;
 
+  std::vector<double> out;
+
   for (auto& itree : *keys) {
     const std::string method = to_lower(itree->get<std::string>("title", ""));
 
@@ -47,14 +48,15 @@ std::vector<double> run_opt(std::string filename) {
       auto opt = std::make_shared<Optimize>(itree, geom, ref);
       opt->compute();
 
-      std::cout.rdbuf(backup_stream);
-      std::shared_ptr<const Matrix> out = opt->geometry()->xyz();
-      return std::vector<double>(out->data(), out->data()+out->size());
+      std::shared_ptr<const Matrix> tmp = opt->geometry()->xyz();
+      out = std::vector<double>(tmp->data(), tmp->data()+tmp->size());
     }
   }
-  assert(false);
-  return std::vector<double>();
+  assert(!out.empty());
+  std::cout.rdbuf(backup_stream);
+  return out;
 }
+
 std::vector<double> reference_scf_opt() {
   std::vector<double> out(6);
   out[2] = 1.749334;
@@ -91,13 +93,13 @@ std::vector<double> reference_ks_opt() {
   out[5] = 0.002208;
   return out;
 }
-std::vector<double> reference_cas_act_opt() {
+std::vector<double> reference_cas_opt() {
   std::vector<double> out(6);
   out[2] = 1.734489;
   out[5] =-0.003832;
   return out;
 }
-std::vector<double> reference_sacas_act_opt() {
+std::vector<double> reference_sacas_opt() {
   std::vector<double> out(6);
   out[2] = 1.702348;
   out[5] =-0.000261;
@@ -127,6 +129,19 @@ std::vector<double> reference_hcl_opt() {
   out[5] = 0.317095;
   return out;
 }
+std::vector<double> reference_ch2_opt() {
+  std::vector<double> out(9);
+  out[0] =-7.922434;
+  out[1] = 5.294612;
+  out[2] =-0.676026;
+  out[3] =-8.364093;
+  out[4] = 3.365386;
+  out[5] =-0.356820;
+  out[6] =-7.482149;
+  out[7] = 7.223682;
+  out[8] =-0.997476;
+  return out;
+}
 
 BOOST_AUTO_TEST_SUITE(TEST_OPT)
 
@@ -149,8 +164,9 @@ BOOST_AUTO_TEST_CASE(MP2_Opt) {
     BOOST_CHECK(compare<std::vector<double>>(run_opt("hf_svp_mp2_aux_opt"),    reference_mp2_aux_opt(),  1.0e-4));
 }
 BOOST_AUTO_TEST_CASE(CASSCF_Opt) {
-    BOOST_CHECK(compare<std::vector<double>>(run_opt("hf_svp_cas_act_opt"),    reference_cas_act_opt(),      1.0e-4));
-    BOOST_CHECK(compare<std::vector<double>>(run_opt("hf_svp_sacas_act_opt"),  reference_sacas_act_opt(),    1.0e-4));
+    BOOST_CHECK(compare<std::vector<double>>(run_opt("hf_svp_cas_opt"),    reference_cas_opt(),      1.0e-4));
+    BOOST_CHECK(compare<std::vector<double>>(run_opt("hf_svp_sacas_opt"),  reference_sacas_opt(),    1.0e-4));
+    BOOST_CHECK(compare<std::vector<double>>(run_opt("ch2_sto3g_meci_opt"),reference_ch2_opt(),      1.0e-4));
 }
 
 BOOST_AUTO_TEST_SUITE_END()

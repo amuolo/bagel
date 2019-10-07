@@ -1,26 +1,25 @@
 //
-// BAGEL - Parallel electron correlation program.
+// BAGEL - Brilliantly Advanced General Electronic Structure Library
 // Filename: dfock.cc
-// Copyright (C) 2013 Matthew Kelley
+// Copyright (C) 2013 Toru Shiozaki
 //
 // Author: Matthew Kelley <matthewkelley2017@northwestern.edu>
 // Maintainer: Shiozaki group
 //
 // This file is part of the BAGEL package.
 //
-// The BAGEL package is free software; you can redistribute it and/or modify
-// it under the terms of the GNU Library General Public License as published by
-// the Free Software Foundation; either version 3, or (at your option)
-// any later version.
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
 //
-// The BAGEL package is distributed in the hope that it will be useful,
+// This program is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-// GNU Library General Public License for more details.
+// GNU General Public License for more details.
 //
-// You should have received a copy of the GNU Library General Public License
-// along with the BAGEL package; see COPYING.  If not, write to
-// the Free Software Foundation, 675 Mass Ave, Cambridge, MA 02139, USA.
+// You should have received a copy of the GNU General Public License
+// along with this program.  If not, see <http://www.gnu.org/licenses/>.
 //
 
 #include <src/scf/dhf/dfock.h>
@@ -31,34 +30,56 @@ using namespace bagel;
 // TODO batch size should be automatically determined by the memory size etc.
 const static int batchsize = 250;
 
-void DFock::two_electron_part(const shared_ptr<const ZMatrix> coeff, const double scale_exchange) {
+DFock::DFock(shared_ptr<const Geometry> a,  shared_ptr<const ZMatrix> hc, const ZMatView coeff, const bool gaunt, const bool breit,
+             const bool store_half, const bool robust, const double scale_exch, const double scale_coulomb, const bool store_half_gaunt)
+  : ZMatrix(*hc), geom_(a), gaunt_(gaunt), breit_(breit), store_half_(store_half), store_half_gaunt_(store_half_gaunt), robust_(robust) {
 
-  assert(geom_->nbasis()*4 == coeff->ndim());
+  assert(breit ? gaunt : true);
+  two_electron_part(coeff, scale_exch, scale_coulomb);
+}
 
-  auto ocoeffall = make_shared<ZMatrix>(*coeff);
-  const int nocc = coeff->mdim();
+
+// Constructing DFock from half-transformed integrals. It is assumed that int1 is multiplied by JJ, int2 is not multplied by J.
+// CAUTION! This only does Dirac-Coulomb
+DFock::DFock(shared_ptr<const Geometry> a, shared_ptr<const ZMatrix> hc, shared_ptr<const ZMatrix> coeff, shared_ptr<const ZMatrix> tcoeff,
+             list<shared_ptr<const RelDFHalf>> int1c, list<shared_ptr<const RelDFHalf>> int2c,
+             const double scale_exch, const double scale_coulomb)
+  : ZMatrix(*hc), geom_(a), gaunt_(false), breit_(false), store_half_(false), store_half_gaunt_(false), robust_(false) {
+
+  // will use the zgemm3m-like algorithm
+  for (auto& i : int1c)
+    i->set_sum_diff();
+  for (auto& i : int2c)
+    i->set_sum_diff();
+
+  build_j(int1c, int2c,  coeff, false, false, scale_coulomb, /*JJ*/2);
+  build_j(int2c, int1c, tcoeff, false, false, scale_coulomb, /*JJ*/0);
+  build_k(int1c, int2c,  coeff, false, false, scale_exch);
+  build_k(int2c, int1c,  coeff, false, false, scale_exch);
+
+  for (auto& i : int1c)
+    i->discard_sum_diff();
+  for (auto& i : int2c)
+    i->discard_sum_diff();
+}
+
+
+void DFock::two_electron_part(const ZMatView coeff, const double scale_exchange, const double scale_coulomb) {
+
+  assert(geom_->nbasis()*4 == coeff.ndim());
+
+  auto ocoeffall = make_shared<ZMatrix>(coeff);
+  const int nocc = coeff.mdim();
   const int nbatch = (nocc-1) / batchsize+1;
   StaticDist dist(nocc, nbatch);
   vector<pair<size_t, size_t>> table = dist.atable();
 
   for (auto& itable : table) {
-    // Separate Coefficients into real and imaginary
-    array<shared_ptr<const Matrix>, 4> rocoeff;
-    array<shared_ptr<const Matrix>, 4> iocoeff;
-    array<shared_ptr<const Matrix>, 4> trocoeff;
-    array<shared_ptr<const Matrix>, 4> tiocoeff;
-
-    for (int i = 0; i != 4; ++i) {
-      shared_ptr<const ZMatrix> ocoeff = coeff->get_submatrix(i*geom_->nbasis(), itable.first, geom_->nbasis(), itable.second);
-      rocoeff[i] = ocoeff->get_real_part();
-      iocoeff[i] = ocoeff->get_imag_part();
-      trocoeff[i] = rocoeff[i]->transpose();
-      tiocoeff[i] = iocoeff[i]->transpose();
-    }
-
-    driver(rocoeff, iocoeff, trocoeff, tiocoeff, false, false, scale_exchange);
+    // slice of the coefficients
+    auto c = make_shared<ZMatrix>(ocoeffall->slice(itable.first, itable.first+itable.second));
+    driver(c, false, false, scale_exchange, scale_coulomb);
     if (gaunt_) {
-      driver(rocoeff, iocoeff, trocoeff, tiocoeff, gaunt_, breit_, scale_exchange);
+      driver(c, gaunt_, breit_, scale_exchange, scale_coulomb);
     }
   }
 }
@@ -88,12 +109,7 @@ void DFock::add_Jop_block(shared_ptr<const RelDF> dfdata, list<shared_ptr<const 
 }
 
 
-void DFock::add_Exop_block(shared_ptr<RelDFHalf> dfc1, shared_ptr<RelDFHalf> dfc2, const double scale, const bool diag) {
-  add_Exop_block(*this, dfc1, dfc2, scale, diag, robust_);
-}
-
-
-void DFock::add_Exop_block(ZMatrix& data, shared_ptr<RelDFHalf> dfc1, shared_ptr<RelDFHalf> dfc2, const double scale, const bool diag, const bool robust) {
+void DFock::add_Exop_block(shared_ptr<const RelDFHalf> dfc1, shared_ptr<const RelDFHalf> dfc2, const double scale, const bool diag) {
 
   // minus from -1 in the definition of exchange
   shared_ptr<Matrix> r, i;
@@ -122,9 +138,9 @@ void DFock::add_Exop_block(ZMatrix& data, shared_ptr<RelDFHalf> dfc1, shared_ptr
       const int index0 = i1->basis(1);
       const int index1 = i2->basis(1);
 
-      data.add_block(-scale, n*index0, n*index1, n, n, out);
-      if (!robust && (!diagonal || *i1 != *i2)) {
-        data.add_block(-scale, n*index1, n*index0, n, n, out->transpose_conjg());
+      add_block(-scale, n*index0, n*index1, n, n, out);
+      if (!robust_ && (!diagonal || *i1 != *i2)) {
+        add_block(-scale, n*index1, n*index0, n, n, out->transpose_conjg());
       }
     }
   }
@@ -168,30 +184,22 @@ list<shared_ptr<RelDFHalf>> DFock::make_half_complex(list<shared_ptr<RelDF>> dfd
     rcoeff[i] = oc->get_real_part();
     icoeff[i] = oc->get_imag_part();
   }
-  return DFock::make_half_complex(dfdists, rcoeff, icoeff);
-}
 
-
-list<shared_ptr<RelDFHalf>> DFock::make_half_complex(list<shared_ptr<RelDF>> dfdists, array<shared_ptr<const Matrix>,4> rocoeff,
-                                                     array<shared_ptr<const Matrix>,4> iocoeff) {
   list<shared_ptr<RelDFHalf>> half_complex;
   for (auto& i : dfdists) {
-    vector<shared_ptr<RelDFHalf>> dat = i->compute_half_transform(rocoeff, iocoeff);
+    vector<shared_ptr<RelDFHalf>> dat = i->compute_half_transform(rcoeff, icoeff);
     half_complex.insert(half_complex.end(), dat.begin(), dat.end());
 
     if (i->not_diagonal()) {
-      vector<shared_ptr<RelDFHalf>> dat = i->swap()->compute_half_transform(rocoeff, iocoeff);
+      vector<shared_ptr<RelDFHalf>> dat = i->swap()->compute_half_transform(rcoeff, icoeff);
       half_complex.insert(half_complex.end(), dat.begin(), dat.end());
     }
   }
   return half_complex;
-
 }
 
 
-void DFock::driver(array<shared_ptr<const Matrix>, 4> rocoeff, array<shared_ptr<const Matrix>, 4> iocoeff,
-                   array<shared_ptr<const Matrix>, 4> trocoeff, array<shared_ptr<const Matrix>, 4>tiocoeff, bool gaunt, bool breit,
-                   const double scale_exchange)  {
+void DFock::driver(shared_ptr<const ZMatrix> coeff, bool gaunt, bool breit, const double scale_exchange, const double scale_coulomb)  {
 
   Timer timer(0);
 
@@ -206,7 +214,7 @@ void DFock::driver(array<shared_ptr<const Matrix>, 4> rocoeff, array<shared_ptr<
 
   list<shared_ptr<RelDF>> dfdists = make_dfdists(dfs, gaunt);
   // Note that we are NOT using dagger-ed coefficients! -1 factor for imaginary will be compensated by RelCDMatrix and Exop
-  list<shared_ptr<RelDFHalf>> half_complex = make_half_complex(dfdists, rocoeff, iocoeff);
+  list<shared_ptr<RelDFHalf>> half_complex = make_half_complex(dfdists, coeff);
 
   const string printtag = !gaunt ? "Coulomb" : "Gaunt";
   timer.tick_print(printtag + ": half trans");
@@ -217,16 +225,16 @@ void DFock::driver(array<shared_ptr<const Matrix>, 4> rocoeff, array<shared_ptr<
 
   timer.tick_print(printtag + ": metric multiply");
 
-  // split
+  // split and factorize before computing K operators
   list<shared_ptr<RelDFHalf>> half_complex_exch, half_complex_exch2;
   for (auto& i : half_complex) {
     list<shared_ptr<RelDFHalf>> tmp = i->split(/*docopy=*/false);
+    i.reset();
     half_complex_exch.insert(half_complex_exch.end(), tmp.begin(), tmp.end());
+    factorize(half_complex_exch);
   }
   half_complex.clear();
 
-  // before computing K operators, we factorize half_complex
-  factorize(half_complex_exch);
   assert(gaunt  || half_complex_exch.size() == 8);
   assert(!gaunt || half_complex_exch.size() == 24);
 
@@ -268,47 +276,115 @@ void DFock::driver(array<shared_ptr<const Matrix>, 4> rocoeff, array<shared_ptr<
   // will use the zgemm3m-like algorithm
   for (auto& i : half_complex_exch)
     i->set_sum_diff();
-  if (half_complex_exch != half_complex_exch2) {
+  if (half_complex_exch != half_complex_exch2)
     for (auto& i : half_complex_exch2)
       i->set_sum_diff();
-  }
 
+  build_j(half_complex_exch, half_complex_exch2, coeff, gaunt, breit, scale_coulomb);
+  build_k(half_complex_exch, half_complex_exch2, coeff, gaunt, breit, scale_exchange);
+
+  for (auto& i : half_complex_exch)
+    i->discard_sum_diff();
+  for (auto& i : half_complex_exch2)
+    i->discard_sum_diff();
+
+  // This is for gradient and second-order CASSCF calculations
+  auto store_half_ints = [](list<shared_ptr<RelDFHalf>>& save, list<shared_ptr<RelDFHalf>>& input) {
+    if (save.size() == 0) {
+      save = input;
+    } else {
+      assert(save.size() == input.size());
+      auto iex = input.begin();
+      for (auto& ist : save) {
+        ist = ist->merge_b1(*iex);
+        iex++;
+      }
+    }
+  };
+
+  if (store_half_ && !gaunt)
+    store_half_ints(half_coulomb_, half_complex_exch);
+  if (store_half_gaunt_ && gaunt) {
+    assert(store_half_);
+    store_half_ints(half_gaunt_, half_complex_exch);
+    if (breit)
+      store_half_ints(half_breit_, half_complex_exch2);
+  }
+}
+
+
+void DFock::build_k(list<shared_ptr<RelDFHalf>> half_complex_exch, list<shared_ptr<RelDFHalf>> half_complex_exch2, shared_ptr<const ZMatrix> coeff,
+                    const bool gaunt, const bool breit, const double scale_exchange) {
+  list<shared_ptr<const RelDFHalf>> tmp1, tmp2;
+  for (auto& i : half_complex_exch)  tmp1.push_back(i);
+  for (auto& i : half_complex_exch2) tmp2.push_back(i);
+  build_k(tmp1, tmp2, coeff, gaunt, breit, scale_exchange);
+}
+
+
+void DFock::build_j(list<shared_ptr<RelDFHalf>> half_complex_exch, list<shared_ptr<RelDFHalf>> half_complex_exch2, shared_ptr<const ZMatrix> coeff,
+                    const bool gaunt, const bool breit, const double scale_coulomb, const int number_of_j) {
+  list<shared_ptr<const RelDFHalf>> tmp1, tmp2;
+  for (auto& i : half_complex_exch)  tmp1.push_back(i);
+  for (auto& i : half_complex_exch2) tmp2.push_back(i);
+  build_j(tmp1, tmp2, coeff, gaunt, breit, scale_coulomb, number_of_j);
+}
+
+
+void DFock::build_k(list<shared_ptr<const RelDFHalf>> half_complex_exch, list<shared_ptr<const RelDFHalf>> half_complex_exch2, shared_ptr<const ZMatrix> coeff,
+                    const bool gaunt, const bool breit, const double scale_exchange) {
+  Timer timer(0);
+  const string printtag = !gaunt ? "Coulomb" : "Gaunt";
   const double gscale = gaunt ? (breit ? -0.5 : -1.0) : 1.0;
 
   // computing K operators
-  int icnt = 0;
-  for (auto& i : half_complex_exch) {
-    int jcnt = 0;
-    for (auto& j : half_complex_exch2) {
-      if (i->alpha_matches(j) && ((!robust_ && icnt <= jcnt) || robust_)) {
-        add_Exop_block(i, j, gscale*scale_exchange, icnt == jcnt);
+  if (scale_exchange != 0.0) {
+    int icnt = 0;
+    for (auto& i : half_complex_exch) {
+      int jcnt = 0;
+      for (auto& j : half_complex_exch2) {
+        if (i->alpha_matches(j) && ((!robust_ && icnt <= jcnt) || robust_))
+          add_Exop_block(i, j, gscale*scale_exchange, icnt == jcnt);
+        ++jcnt;
       }
-      ++jcnt;
+      ++icnt;
     }
-    ++icnt;
+    timer.tick_print(printtag + ": K operator");
   }
+}
 
-  timer.tick_print(printtag + ": K operator");
 
-  list<shared_ptr<const RelCDMatrix>> cd;
-  // compute J operators
-  for (auto& j : half_complex_exch2) {
-    for (auto& i : j->basis()) {
-      cd.push_back(make_shared<RelCDMatrix>(j, i, trocoeff, tiocoeff, geom_->df()->data2()));
+void DFock::build_j(list<shared_ptr<const RelDFHalf>> dummy, list<shared_ptr<const RelDFHalf>> half_complex_exch2, shared_ptr<const ZMatrix> coeff,
+                    const bool gaunt, const bool breit, const double scale_coulomb, const int number_of_j) {
+  Timer timer(0);
+  const string printtag = !gaunt ? "Coulomb" : "Gaunt";
+  const double gscale = gaunt ? (breit ? -0.5 : -1.0) : 1.0;
+
+  if (scale_coulomb != 0.0) {
+    array<shared_ptr<const Matrix>,4> trocoeff, tiocoeff;
+    for (int i = 0; i != 4; ++i) {
+      shared_ptr<const ZMatrix> c = coeff->cut(i*geom_->nbasis(), (i+1)*geom_->nbasis());
+      trocoeff[i] = c->get_real_part()->transpose();
+      tiocoeff[i] = c->get_imag_part()->transpose();
     }
-  }
 
-  for (auto& i : dfdists) {
-    add_Jop_block(i, cd, gscale);
-  }
+    vector<shared_ptr<const DFDist>> dfs;
+    if (!gaunt) {
+      // get individual df dist objects for each block and add df to dfs
+      dfs = geom_->dfs()->split_blocks();
+      dfs.push_back(geom_->df());
+    } else if (gaunt) {
+      dfs = geom_->dfsl()->split_blocks();
+    }
+    list<shared_ptr<RelDF>> dfdists = make_dfdists(dfs, gaunt);
 
-  // this is for gradient calculations
-  if (store_half_) {
-    assert(!gaunt_);
-    for (auto& i : half_complex_exch)
-      i->discard_sum_diff();
-    half_ = half_complex_exch;
+    list<shared_ptr<const RelCDMatrix>> cd;
+    // compute J operators
+    for (auto& j : half_complex_exch2)
+      for (auto& i : j->basis())
+        cd.push_back(make_shared<RelCDMatrix>(j, i, trocoeff, tiocoeff, geom_->df()->data2(), number_of_j));
+    for (auto& i : dfdists)
+      add_Jop_block(i, cd, gscale);
+    timer.tick_print(printtag + ": J operator");
   }
-
-  timer.tick_print(printtag + ": J operator");
 }
