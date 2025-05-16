@@ -1,10 +1,10 @@
 //
 // BAGEL - Brilliantly Advanced General Electronic Structure Library
 // Filename: moldenout.h
-// Copyright (C) 2012 Toru Shiozaki
+// Copyright (C) 2012 Quantum Simulation Technologies, Inc.
 //
 // Author: Shane Parker <shane.parker@u.northwestern.edu>
-// Maintainer: NU theory
+// Maintainer: QSimulate
 //
 // This file is part of the BAGEL package.
 //
@@ -65,6 +65,14 @@ class MoldenOut : public MoldenIO {
       MoldenOut& operator<< (std::shared_ptr<const Molecule>);
       MoldenOut& operator<< (std::shared_ptr<const Reference>);
 
+      // TODO: Maybe it's a little bit ugly to expose this private data.
+      template<typename Type>
+      void write_mo_single(std::ostream& ss, const Type* data) {
+        write_mo_one(ss, data) ;
+      }
+      std::ostream& ofs() {
+	return ofs_;
+      }
 };
 
 }

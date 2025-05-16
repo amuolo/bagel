@@ -1,10 +1,10 @@
 //
 // BAGEL - Brilliantly Advanced General Electronic Structure Library
 // Filename: gamma_forest_asd.h
-// Copyright (C) 2014 Toru Shiozaki
+// Copyright (C) 2014 Quantum Simulation Technologies, Inc.
 //
 // Author: Shane Parker <shane.parker@u.northwestern.edu>
-// Maintainer: Shiozaki Group
+// Maintainer: QSimulate
 //
 // This file is part of the BAGEL package.
 //
@@ -78,7 +78,7 @@ class GammaForestASD : public GammaForest<VecType, 1> {
 #ifdef DEBUG
               std::cout << "inserting: <" << bra.first.nelea << ", " << bra.first.neleb << "|";
               for (auto opiter = coupling.begin(); opiter != coupling.end(); ++opiter)
-                std::cout << is_alpha(*opiter) ? "(A)" : "(B)" << is_creation(*opiter) ? "^t" : "";
+                std::cout << (is_alpha(*opiter) ? "(A)" : "(B)") << (is_creation(*opiter) ? "^t" : "");
               std::cout << "|" << ket.first.nelea << ", " << ket.first.neleb << ">" << std::endl;
 #endif
               sparselist_.emplace_back(coupling, BlockInfo(bra.first.nelea, bra.first.neleb, bra.second->ij()), BlockInfo(ket.first.nelea, ket.first.neleb, ket.second->ij()));

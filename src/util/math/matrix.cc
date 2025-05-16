@@ -1,10 +1,10 @@
 //
 // BAGEL - Brilliantly Advanced General Electronic Structure Library
 // Filename: matrix.cc
-// Copyright (C) 2009 Toru Shiozaki
+// Copyright (C) 2009 Quantum Simulation Technologies, Inc.
 //
-// Author: Toru Shiozaki <shiozaki@northwestern.edu>
-// Maintainer: Shiozaki group
+// Author: Toru Shiozaki <shiozaki@qsimulate.com>
+// Maintainer: QSimulate
 //
 // This file is part of the BAGEL package.
 //
@@ -365,6 +365,35 @@ void Matrix::sqrt() {
     *this = *(*dist ^ *dist).matrix();
   }
 #endif
+}
+
+
+// compute determinant of square matrix via LU decomposition
+double Matrix::det() const {
+  assert(ndim() == mdim());
+  const int n = ndim();
+  shared_ptr<Matrix> mat = this->copy();
+  
+  int info;
+  unique_ptr<int[]> ipiv(new int[n]);
+  // find LU decomposition of mat
+  dgetrf_(n, n, mat->data(), n, ipiv.get(), info);
+  if (info < 0) throw runtime_error("dgetrf_ failed in Matrix::det()");
+
+  // determinant of triangular matrix U is product of the diagonals
+  double detU = 1.0;
+  for (int i = 0; i < n; i++) {
+    detU *= mat->element(i,i);
+  }
+  // determine sign of permutation, det(P), from sequence of row swaps
+  double detP = 1.0;
+  for (int i = 0; i < n; i++) {
+    // Apparently indices in ipiv are 1-based !
+    if (ipiv[i] != i+1) {
+      detP *= -1.0;
+    }
+  }
+  return detP * detU;
 }
 
 

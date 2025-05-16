@@ -1,10 +1,10 @@
 //
 // BAGEL - Brilliantly Advanced General Electronic Structure Library
 // Filename: casnoopt.h
-// Copyright (C) 2016 Toru Shiozaki
+// Copyright (C) 2016 Quantum Simulation Technologies, Inc.
 //
-// Author: Toru Shiozaki <shiozaki@northwestern.edu>
-// Maintainer: Shiozaki group
+// Author: Toru Shiozaki <shiozaki@qsimulate.com>
+// Maintainer: QSimulate
 //
 // This file is part of the BAGEL package.
 //
@@ -53,7 +53,7 @@ class CASNoopt : public CASSCF {
         energy_ = ref_->energy();
       }
 
-      if (canonical_) {
+      {
         auto tmp = semi_canonical_orb();
         coeff_ = std::get<0>(tmp);
         eig_   = std::get<1>(tmp);

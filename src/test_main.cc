@@ -1,10 +1,10 @@
 //
 // BAGEL - Brilliantly Advanced General Electronic Structure Library
 // Filename: test_main.cc
-// Copyright (C) 2012 Toru Shiozaki
+// Copyright (C) 2012 Quantum Simulation Technologies, Inc.
 //
-// Author: Toru Shiozaki <shiozaki@northwestern.edu>
-// Maintainer: Shiozaki group
+// Author: Toru Shiozaki <shiozaki@qsimulate.com>
+// Maintainer: QSimulate
 //
 // This file is part of the BAGEL package.
 //
@@ -79,3 +79,4 @@ bool compare(const T a, const T b, const double thr = THRESH) {
 #include <src/testimpl/test_pseudospin.cc>
 #include <src/testimpl/test_smith.cc>
 #include <src/testimpl/test_response.cc>
+#include <src/testimpl/test_dyson.cc>

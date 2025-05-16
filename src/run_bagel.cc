@@ -1,10 +1,10 @@
 //
 // BAGEL - Brilliantly Advanced General Electronic Structure Library
 // Filename: run_bagel.cc
-// Copyright (C) 2009 Toru Shiozaki
+// Copyright (C) 2009 Quantum Simulation Technologies, Inc.
 //
-// Author: Toru Shiozaki <shiozaki@northwestern.edu>
-// Maintainer: Shiozaki group
+// Author: Toru Shiozaki <shiozaki@qsimulate.com>
+// Maintainer: QSimulate
 //
 // This file is part of the BAGEL package.
 //
@@ -30,6 +30,7 @@
 #include <src/grad/hess.h>
 #include <src/opt/optimize.h>
 #include <src/wfn/localization.h>
+#include <src/wfn/dyson.h>
 #include <src/asd/construct_asd.h>
 #include <src/asd/orbital/construct_asd_orbopt.h>
 #include <src/asd/dmrg/rasd.h>
@@ -216,6 +217,11 @@ void bagel::impl::run_bagel_(shared_ptr<const PTree> idata) {
         mfs << geom;
         if (orbitals || vibration) mfs << ref;
       }
+    } else if (title == "dyson") {
+      shared_ptr<DysonOrbitals> dyson = make_shared<DysonOrbitals>(itree);
+      dyson->compute();
+      dyson->print_results();
+      dyson->write_molden();
     } else {
       // otherwise, they are considered single point energy calculation
       tie(ignore, ref) = get_energy(title, itree, geom, ref);

@@ -1,10 +1,10 @@
 //
 // BAGEL - Brilliantly Advanced General Electronic Structure Library
 // Filename: moldenout.cc
-// Copyright (C) 2012 Toru Shiozaki
+// Copyright (C) 2012 Quantum Simulation Technologies, Inc.
 //
 // Author: Shane Parker <shane.parker@u.northwestern.edu>
-// Maintainer: NU theory
+// Maintainer: QSimulate
 //
 // This file is part of the BAGEL package.
 //
@@ -158,7 +158,7 @@ void MoldenOut::write_mos() {
     if (ref_->coeffB()) {
       ss << " Ene=" << setw(12) << setprecision(6) << fixed << (eigB.empty() ? 0.0 : eigB[i]) << endl;
       ss << " Spin=" << "  Beta" << endl;
-      ss << " Occup=" << setw(12) << occupB[i] << endl;
+      ss << " Occup=" << setw(12) << (occupB.empty() ? 0.0 : occupB[i]) << endl;
       write_mo_one(ss, ref_->coeffB()->element_ptr(0, i));
     }
   }

@@ -1,10 +1,10 @@
 //
 // BAGEL - Brilliantly Advanced General Electronic Structure Library
 // Filename: smith.h
-// Copyright (C) 2013 Toru Shiozaki
+// Copyright (C) 2013 Quantum Simulation Technologies, Inc.
 //
 // Author: Matthew K. MacLeod <matthew.macleod@northwestern.edu>
-// Maintainer: Shiozaki group
+// Maintainer: QSimulate
 //
 // This file is part of the BAGEL package.
 //
@@ -78,8 +78,14 @@ class Smith : public Method {
     // Gradient module to be separated
     void compute_gradient(const int istate, const int jstate, std::shared_ptr<const NacmType> nacmtype = std::make_shared<const NacmType>("interstate"), const bool nocider = false);
 
-    // just return the reference used in SMITH code
-    std::shared_ptr<const Reference> conv_to_ref() const override { return ref_; }
+    // Returns the rotated XMS-CASPT2 reference.
+    std::shared_ptr<const Reference> conv_to_ref() const override {
+#ifdef COMPILE_SMITH
+      return algo()->info()->ref();
+#else
+      return ref_;
+#endif
+    }
 
     std::shared_ptr<const Matrix> dm1() const { return dm1_; }
     std::shared_ptr<const Matrix> dm11() const { return dm11_; }

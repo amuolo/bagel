@@ -1,10 +1,10 @@
 //
 // BAGEL - Brilliantly Advanced General Electronic Structure Library
 // Filename: get_grad.cc
-// Copyright (C) 2016 Toru Shiozaki
+// Copyright (C) 2016 Quantum Simulation Technologies, Inc.
 //
 // Author: Jae Woo Park <jwpk1201@northwestern.edu>
-// Maintainer: Shiozaki group
+// Maintainer: QSimulate
 //
 // This file is part of the BAGEL package.
 //
@@ -325,7 +325,7 @@ tuple<double,double,shared_ptr<const Reference>,shared_ptr<GradFile>> Opt::get_m
     x1->scale(1.0 / x1norm);
   auto xf = make_shared<GradFile>(*x1);
   const double en  = en2 - en1;
-  xf->scale(2.0 * en / x1norm);
+  xf->scale(2.0 * en);
 
   shared_ptr<GradFile> xg;
   const bool refg = idata_->get<bool>("mdci_reference_geometry", false);

@@ -1,10 +1,10 @@
 //
 // BAGEL - Brilliantly Advanced General Electronic Structure Library
 // Filename: serialization.h
-// Copyright (C) 2014 Toru Shiozaki
+// Copyright (C) 2014 Quantum Simulation Technologies, Inc.
 //
-// Author: Toru Shiozaki <shiozaki@northwestern.edu>
-// Maintainer: Shiozaki group
+// Author: Toru Shiozaki <shiozaki@qsimulate.com>
+// Maintainer: QSimulate
 //
 // This file is part of the BAGEL package.
 //
@@ -32,6 +32,7 @@
 #include <unordered_map>
 #include <type_traits>
 #include <boost/version.hpp>
+#include <boost/archive/basic_archive.hpp>
 #include <boost/serialization/serialization.hpp>
 #include <boost/serialization/complex.hpp>
 #include <boost/serialization/bitset.hpp>
